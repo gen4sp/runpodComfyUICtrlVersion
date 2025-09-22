@@ -117,6 +117,38 @@ python3 scripts/verify_models.py \
   --verbose
 ```
 
+### Пиновка зависимостей
+
+Перевести гибкий `requirements.txt` в детерминированный список для lock-файла:
+
+```bash
+python3 scripts/pin_requirements.py \
+  --requirements ./requirements.txt \
+  --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json \
+  --in-place \
+  --pretty
+```
+
+Оффлайн-пиновка при наличии wheel-артефактов:
+
+```bash
+python3 scripts/pin_requirements.py \
+  --requirements ./requirements.txt \
+  --offline --wheels-dir /path/to/wheels \
+  --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json \
+  --in-place
+```
+
+Можно явно задать wheel-URL для отдельных пакетов (перезаписывает auto-URL из freeze):
+
+```bash
+python3 scripts/pin_requirements.py \
+  --requirements ./requirements.txt \
+  --wheel-url torch=https://download.pytorch.org/whl/cpu/torch-...whl \
+  --wheel-url torchvision=https://download.pytorch.org/whl/cpu/torchvision-...whl \
+  --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json --in-place
+```
+
 ### Клонирование версии
 
 Развернуть окружение по lock-файлу в новую директорию:
@@ -126,19 +158,66 @@ python3 scripts/verify_models.py \
   --target "$HOME/comfy-$COMFY_VERSION_NAME"
 ```
 
+Опции:
+
+-   `--python PYTHON` — базовый Python для утилит на этапе клонирования.
+-   `--skip-models` — пропустить проверку/скачивание моделей.
+-   `--offline` — установка зависимостей без индексов (только локальные колёса/кэш pip).
+-   `--wheels-dir DIR` — директория с wheel-артефактами (для `--offline`).
+-   `--pip-extra-args "..."` — дополнительные аргументы для `pip install`.
+
+Пример оффлайн-клона:
+
+```bash
+./scripts/clone_version.sh \
+  --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json \
+  --target /runpod-volume/comfy \
+  --offline --wheels-dir /wheels
+```
+
 ### Удаление версии
 
 ```bash
 ./scripts/remove_version.sh --target "$HOME/comfy-$COMFY_VERSION_NAME"
 ```
 
+Опции и безопасность:
+
+-   `--yes` — без подтверждений (non-interactive режим).
+-   `--remove-models` — удалить также каталог `models` внутри окружения.
+-   `--remove-root` — попытаться удалить корневой каталог окружения после очистки.
+-   `--dry-run` — только показать, что будет удалено.
+
+Удаление выполняется только если обнаружен каталог `ComfyUI` или файл-маркер `.comfy_env` (создаётся при клонировании).
+
 ### Сборка Docker-образа с handler
 
 ```bash
-./scripts/build_docker.sh --version "$COMFY_VERSION_NAME"
+./scripts/build_docker.sh --version "$COMFY_VERSION_NAME" --tag runpod-comfy:local
 ```
 
-### Локальный запуск handler
+Локальный тест (демо-воркфлоу и заглушка исполнения внутри handler):
+
+```bash
+docker run --rm \
+  -e COMFY_VERSION_NAME="$COMFY_VERSION_NAME" \
+  -e GCS_BUCKET="$GCS_BUCKET" \
+  runpod-comfy:local --help | cat
+```
+
+Запуск с lock и workflow:
+
+```bash
+docker run --rm \
+  -e COMFY_VERSION_NAME="$COMFY_VERSION_NAME" \
+  -e OUTPUT_MODE=base64 \
+  runpod-comfy:local \
+  --lock /app/lockfiles/comfy-$COMFY_VERSION_NAME.lock.json \
+  --workflow /app/workflows/example.json \
+  --output base64 | head -c 80; echo
+```
+
+### Локальный запуск handler (без Docker)
 
 ```bash
 ./scripts/run_handler_local.sh \
@@ -147,7 +226,7 @@ python3 scripts/verify_models.py \
   --output base64
 ```
 
-Вместо `--output base64` можно опустить параметр и настроить GCS через переменные окружения.
+Вместо `--output base64` можно опустить параметр и настроить GCS через переменные окружения (`GCS_BUCKET`, `GOOGLE_APPLICATION_CREDENTIALS`).
 
 ### Выходные данные
 
