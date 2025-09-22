@@ -39,9 +39,16 @@
 
     -   `comfyui`: { `repo`, `commit` }
     -   `custom_nodes`: [{ `name`, `repo`, `commit` }]
-    -   `python`: { `version`, `packages`: [{ `name`, `version` | `url` }] }
-    -   `models`: [{ `name`, `source`, `checksum`, `target_path` }]
+    -   `python`: { `version`, `interpreter`, `packages`: [{ `name`, `version` | `url` }] }
+    -   `models`: [{ `name`, `source?`, `checksum?`, `target_path` }]
     -   `runtime`: { `env`, `cuda`, `extras` }
+
+Примечания по детерминизму:
+
+-   Скрипт генерации не пишет метаданные времени.
+-   Списки сортируются по стабильным ключам (имя пакета/узла/модели).
+-   Пути в моделях сохраняются в «сыром» виде (могут содержать `$COMFY_HOME`),
+    при вычислении `checksum` локально производится экспансия переменных окружения.
 
 -   Handler:
     -   Принимает: путь/описание воркфлоу, имя версии/lock-файл, параметры вывода.

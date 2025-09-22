@@ -50,17 +50,38 @@ python "$COMFY_HOME/ComfyUI/main.py"
 
 ### Создание lock-версии
 
-Сгенерируйте lock-файл, зафиксировав SHA/версии:
+Сгенерируйте lock-файл, зафиксировав SHA/версии ComfyUI, custom nodes, Python-зависимости и модели:
 
 ```bash
 python3 scripts/create_version.py --name "$COMFY_VERSION_NAME" \
   --comfy-repo https://github.com/comfyanonymous/ComfyUI \
   --custom-node repo=https://github.com/author/custom-node.git,name=custom-node \
   --requirements ./requirements.txt \
-  --models-spec ./models/spec.yml
+  --models-spec ./models/spec.yml \
+  --pretty
 ```
 
+По умолчанию скрипт ищет пути на основе `COMFY_HOME`:
+
+-   `ComfyUI` по адресу: `$COMFY_HOME/ComfyUI` (если не задано `--comfy-path`).
+-   `venv` для `pip freeze`: `$COMFY_HOME/.venv` (если не задано `--venv`).
+-   базовый каталог моделей: `$COMFY_HOME/models` (используется только для экспансии путей в чек-суммах).
+
+Ключевые параметры:
+
+-   `--name` — имя версии (попадает в `lockfiles/comfy-<name>.lock.json`).
+-   `--comfy-path` — путь к локальному репозиторию ComfyUI (git). Если не указан, берется `$COMFY_HOME/ComfyUI`.
+-   `--comfy-repo` — URL репозитория для метаданных (необязательно, если есть git remote `origin`).
+-   `--custom-node` — повторы вида `name=...,path=...,repo=...,commit=...`. Можно указывать несколько раз. Локальный `path` позволяет autodiscovery commit/remote.
+-   `--venv` — путь к venv; если задан/найден venv, зависимости берутся через `pip freeze`.
+-   `--requirements` — альтернативно можно указать pinned `requirements.txt` (используется, если нет venv).
+-   `--models-spec` — YAML/JSON со списком моделей. Формат: список объектов или `{ models: [...] }`, где элемент: `{ name, source?, target_path, checksum? }`.
+-   `--wheel-url name=url` — можно повторять; подменяет `url` для пакета в Python-секции.
+-   `--pretty` — человекочитаемый JSON (иначе компактный, стабильно отсортированный).
+
 Результат: `lockfiles/comfy-$COMFY_VERSION_NAME.lock.json`.
+
+Детерминизм: скрипт не добавляет временных меток; коллекции сортируются по стабильным ключам; повторный запуск при неизменных входных дает идентичный вывод.
 
 ### Верификация и скачивание моделей
 
