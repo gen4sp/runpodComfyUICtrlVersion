@@ -90,6 +90,33 @@ python3 scripts/verify_models.py --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock
   --models-dir "$COMFY_HOME/models"
 ```
 
+Параметры:
+
+-   `--cache-dir PATH` — директория кэша артефактов (по умолчанию: `$COMFY_HOME/.cache/models`).
+-   `--overwrite` — перезаписывать целевой файл, если checksum не совпадает и есть `source` в lock-файле.
+-   `--timeout SEC` — таймаут сетевых загрузок (по умолчанию 120 сек).
+-   `--verbose` — подробный вывод статуса по каждой модели.
+
+Поддерживаемые источники `source` в lock-файле:
+
+-   **http/https** — прямые ссылки на файлы.
+-   **file** — локальные пути или `file:///...`.
+-   **gs://...** — требуется установленный `gsutil` (Google Cloud SDK).
+
+Подстановка переменных в `target_path`:
+
+-   Поддерживаются `$COMFY_HOME` и `$MODELS_DIR` (последний можно задать флагом `--models-dir`).
+
+Пример восстановления удаленного файла:
+
+```bash
+rm "$COMFY_HOME/models/path/to/model.safetensors"
+python3 scripts/verify_models.py \
+  --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json \
+  --models-dir "$COMFY_HOME/models" \
+  --verbose
+```
+
 ### Клонирование версии
 
 Развернуть окружение по lock-файлу в новую директорию:
