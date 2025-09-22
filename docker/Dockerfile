@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
-# Мультиархитектурный базовый образ Python 3.10 slim
-FROM python:3.10-slim AS runtime
+# Мультиархитектурный базовый образ Python 3.11 slim
+FROM python:3.11-slim AS runtime
 
 ARG COMFY_VERSION_NAME=default
 

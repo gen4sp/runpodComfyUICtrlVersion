@@ -104,3 +104,12 @@
 ### Ограничения и статус
 
 -   Lock-файлы: beta. Поддержка пиновки по SHA/версиям уже закладывается, будет расширяться.
+
+### RunPod / Serverless (кратко)
+
+-   Детальный гид: см. `docs/runpod.md`.
+-   Дефолтные пути внутри образа: `COMFY_HOME=/opt/comfy`, `MODELS_DIR=/opt/comfy/models`.
+-   Для Pods рекомендуется переопределять на volume: `/runpod-volume/comfy`.
+-   Точка входа: `docker/entrypoint.sh` → `python -m docker.handler.main`.
+-   Параметры handler: `--lock`, `--workflow`, `--output {base64|gcs}` (по умолчанию `gcs`), `--gcs-bucket`, `--gcs-prefix`, `--models-dir`, `--verbose`.
+-   GCS переменные: `GCS_BUCKET`, `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`/`GCS_PROJECT`, `GCS_PREFIX`, `GCS_RETRIES`, `GCS_RETRY_BASE_SLEEP`, `GCS_PUBLIC`, `GCS_SIGNED_URL_TTL`, `GCS_VALIDATE`.

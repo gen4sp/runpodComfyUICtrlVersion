@@ -19,7 +19,7 @@ EOF
 
 LOCK=""
 WORKFLOW=""
-OUTPUT="base64"
+OUTPUT=""
 OUT_FILE=""
 
 while [[ $# -gt 0 ]]; do
@@ -42,7 +42,7 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 "$PYTHON_BIN" -m docker.handler.main \
   --lock "$LOCK" \
   --workflow "$WORKFLOW" \
-  --output "$OUTPUT" \
+  ${OUTPUT:+--output "$OUTPUT"} \
   ${OUT_FILE:+--out-file "$OUT_FILE"}
 
 

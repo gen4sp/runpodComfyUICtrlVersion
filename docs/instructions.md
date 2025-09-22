@@ -4,16 +4,26 @@
 
 ### Предварительные требования
 
--   macOS, установленный Docker, Python 3.10+.
+-   macOS, установленный Docker, Python 3.11+.
 -   Доступ к интернету для скачивания зависимостей и моделей (или подготовленные wheel-артефакты и локальные источники).
 -   (Опционально) Доступ к Google Cloud Storage для загрузки результатов.
 
 ### Переменные окружения
 
 -   `COMFY_HOME` — базовая директория установки ComfyUI (локально или путь volume на RunPod).
+-   `MODELS_DIR` — базовая директория моделей (по умолчанию `$COMFY_HOME/models`).
 -   `COMFY_VERSION_NAME` — удобное имя версии (используется для поиска lock-файла).
--   `GCS_BUCKET` — имя bucket для загрузки результатов (если используется вывод в GCS).
--   `GOOGLE_APPLICATION_CREDENTIALS` — путь к JSON ключу сервисного аккаунта.
+-   `LOCK_PATH` — явный путь к lock-файлу (перебивает `COMFY_VERSION_NAME`).
+-   `OUTPUT_MODE` — режим вывода результата: `gcs` (по умолчанию) или `base64`.
+-   `GCS_BUCKET` — имя bucket для загрузки результатов (используется по умолчанию).
+-   `GOOGLE_APPLICATION_CREDENTIALS` — путь к JSON ключу сервисного аккаунта (обязателен для GCS).
+-   `GOOGLE_CLOUD_PROJECT` — ID проекта GCP (или `GCS_PROJECT`).
+-   `GCS_PREFIX` — префикс ключа в bucket (по умолчанию `comfy/outputs`).
+-   `GCS_RETRIES` — количество попыток при загрузке (по умолчанию 3).
+-   `GCS_RETRY_BASE_SLEEP` — базовая задержка перед повтором (сек, по умолчанию 0.5).
+-   `GCS_PUBLIC` — если `true`, объекту ставится ACL public-read.
+-   `GCS_SIGNED_URL_TTL` — если >0, будет сгенерирован подписанный URL на TTL секунд (печатается в verbose-логе).
+-   `GCS_VALIDATE` — если `true` (по умолчанию), выполняется базовая проверка доступа к bucket при старте.
 
 ### Инициализация ComfyUI
 
@@ -149,6 +159,33 @@ python3 scripts/pin_requirements.py \
   --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json --in-place
 ```
 
+#### Torch/CUDA через lock-файл
+
+Рекомендуется фиксировать колёса `torch*` (и совместимые пакеты) через `--wheel-url` или заранее в `requirements.txt` с `name @ url`.
+
+Примеры (GPU, CUDA 12.4):
+
+```bash
+python3 scripts/pin_requirements.py \
+  --requirements ./requirements.txt \
+  --wheel-url torch=https://download.pytorch.org/whl/cu124/torch-<ver>-cp311-cp311-linux_x86_64.whl \
+  --wheel-url torchvision=https://download.pytorch.org/whl/cu124/torchvision-<ver>-cp311-cp311-linux_x86_64.whl \
+  --wheel-url xformers=https://download.pytorch.org/whl/cu124/xformers-<ver>-cp311-cp311-linux_x86_64.whl \
+  --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json --in-place --pretty
+```
+
+Примеры (CPU):
+
+```bash
+python3 scripts/pin_requirements.py \
+  --requirements ./requirements.txt \
+  --wheel-url torch=https://download.pytorch.org/whl/cpu/torch-<ver>-cp311-cp311-manylinux2014_x86_64.whl \
+  --wheel-url torchvision=https://download.pytorch.org/whl/cpu/torchvision-<ver>-cp311-cp311-manylinux2014_x86_64.whl \
+  --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json --in-place --pretty
+```
+
+Во время применения lock-файла `resolver` установит пакеты точно по URL, обеспечивая воспроизводимость для нужного CUDA/CPU профиля.
+
 ### Клонирование версии
 
 Развернуть окружение по lock-файлу в новую директорию:
@@ -202,6 +239,8 @@ python3 scripts/pin_requirements.py \
 docker run --rm \
   -e COMFY_VERSION_NAME="$COMFY_VERSION_NAME" \
   -e GCS_BUCKET="$GCS_BUCKET" \
+  -e GOOGLE_APPLICATION_CREDENTIALS="/path/in/container/key.json" \
+  -e GOOGLE_CLOUD_PROJECT="$GOOGLE_CLOUD_PROJECT" \
   runpod-comfy:local --help | cat
 ```
 
@@ -210,11 +249,11 @@ docker run --rm \
 ```bash
 docker run --rm \
   -e COMFY_VERSION_NAME="$COMFY_VERSION_NAME" \
-  -e OUTPUT_MODE=base64 \
+  -e OUTPUT_MODE=gcs \
   runpod-comfy:local \
   --lock /app/lockfiles/comfy-$COMFY_VERSION_NAME.lock.json \
   --workflow /app/workflows/example.json \
-  --output base64 | head -c 80; echo
+  --output gcs | cat
 ```
 
 ### Локальный запуск handler (без Docker)
@@ -226,7 +265,35 @@ docker run --rm \
   --output base64
 ```
 
-Вместо `--output base64` можно опустить параметр и настроить GCS через переменные окружения (`GCS_BUCKET`, `GOOGLE_APPLICATION_CREDENTIALS`).
+По умолчанию используется вывод в GCS. Можно явно указать `--output base64` для работы без облака.
+
+### Репродукция и регрессия
+
+Двойная сборка и сравнение SHA/чек-сумм:
+
+```bash
+python3 scripts/repro_env_compare.py \
+  --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json \
+  --verbose
+```
+
+Сохранить и сравнить хэш артефакта воркфлоу:
+
+```bash
+# записать эталон
+python3 scripts/repro_workflow_hash.py \
+  --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json \
+  --workflow ./workflows/example.json \
+  --baseline ./workflows/example.baseline.json \
+  --mode record
+
+# сравнить с эталоном
+python3 scripts/repro_workflow_hash.py \
+  --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json \
+  --workflow ./workflows/example.json \
+  --baseline ./workflows/example.baseline.json \
+  --mode compare
+```
 
 ### Выходные данные
 
@@ -238,3 +305,31 @@ docker run --rm \
 -   Повторно запустите скрипты с флагом `--verbose` (если предусмотрен).
 -   Проверьте корректность `GOOGLE_APPLICATION_CREDENTIALS` и прав на bucket.
 -   Сравните текущие зависимости и SHA с содержимым lock-файла.
+
+### RunPod / serverless
+
+-   Базовые инструкции и лучшие практики описаны в `docs/runpod.md`.
+-   Ключевые переменные окружения:
+
+    -   `COMFY_HOME` (например `/runpod-volume/comfy`), `MODELS_DIR` (обычно `$COMFY_HOME/models`).
+    -   `COMFY_VERSION_NAME` или явный `LOCK_PATH`.
+    -   `OUTPUT_MODE` (`gcs` по умолчанию) и GCS-переменные (`GCS_BUCKET`, `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`/`GCS_PROJECT`, `GCS_PREFIX`, `GCS_RETRIES`, `GCS_RETRY_BASE_SLEEP`, `GCS_PUBLIC`, `GCS_SIGNED_URL_TTL`).
+
+-   Smoke-тест в контейнере:
+
+    ```bash
+    echo '{}' > /app/workflows/minimal.json
+    python -m docker.handler.main \
+      --lock "/app/lockfiles/comfy-${COMFY_VERSION_NAME}.lock.json" \
+      --workflow /app/workflows/minimal.json \
+      --output base64 | head -c 80; echo
+    ```
+
+    Для GCS:
+
+    ```bash
+    python -m docker.handler.main \
+      --lock "/app/lockfiles/comfy-${COMFY_VERSION_NAME}.lock.json" \
+      --workflow /app/workflows/minimal.json \
+      --output gcs | cat
+    ```

@@ -22,7 +22,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="RunPod ComfyUI handler (CLI)")
     p.add_argument("--lock", required=False, default=os.environ.get("LOCK_PATH"), help="Path to lock file (JSON)")
     p.add_argument("--workflow", required=False, default=None, help="Path to ComfyUI workflow JSON (graph)")
-    p.add_argument("--output", choices=["base64", "gcs"], default=os.environ.get("OUTPUT_MODE", "base64"), help="How to return result")
+    p.add_argument("--output", choices=["base64", "gcs"], default=os.environ.get("OUTPUT_MODE", "gcs"), help="How to return result")
     p.add_argument("--out-file", default=None, help="Optional path to write base64 output")
     p.add_argument("--gcs-bucket", default=os.environ.get("GCS_BUCKET"), help="Target GCS bucket for uploads")
     p.add_argument("--gcs-prefix", default=os.environ.get("GCS_PREFIX", "comfy/outputs"), help="Prefix inside the bucket")
