@@ -1,3 +1,14 @@
+__pycache__/
+.pytest_cache/
+.venv/
+*.pyc
+*.pyo
+.DS_Store
+lockfiles/*.json
+artifacts/
+baselines/
+tmp/
+
 # OS / IDE
 .DS_Store
 .idea/
