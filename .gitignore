@@ -1,0 +1,36 @@
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+
+# Env
+.env
+.env.*
+!*.example
+
+# Logs
+logs/
+*.log
+
+# Node
+node_modules/
+
+# Test caches
+**/.pytest_cache/
+
+# Local data
+/tmp/
+
+# Project artifacts
+comfy/
+versions/
+models/

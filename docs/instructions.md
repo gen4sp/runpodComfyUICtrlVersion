@@ -17,14 +17,35 @@
 
 ### Инициализация ComfyUI
 
-1. Запустите `scripts/init_comfyui.sh` с указанием `COMFY_HOME`.
-2. Скрипт создаст `venv`, установит базовые зависимости и подготовит структуру.
+Скрипт `scripts/init_comfyui.sh` клонирует репозиторий ComfyUI, создает `venv` и устанавливает базовые зависимости.
 
-Пример:
+Параметры:
+
+-   `--path PATH` — путь установки (`COMFY_HOME`). По умолчанию: `./comfy`.
+-   `--repo URL` — репозиторий ComfyUI. По умолчанию: `https://github.com/comfyanonymous/ComfyUI.git`.
+-   `--ref REF` — ветка/тег/commit для checkout.
+-   `--venv PATH` — путь к виртуальному окружению. По умолчанию: `$COMFY_HOME/.venv`.
+-   `--install-torch auto|cpu|skip` — установка PyTorch (по умолчанию `skip`). На macOS ставится обычный билд, на Linux — CPU wheels.
+-   `--python PYTHON` — путь к исполняемому Python (по умолчанию `python3`).
+
+Примеры:
 
 ```bash
 export COMFY_HOME="$HOME/comfy"
-./scripts/init_comfyui.sh
+./scripts/init_comfyui.sh --install-torch auto
+```
+
+RunPod volume:
+
+```bash
+./scripts/init_comfyui.sh --path /runpod-volume/comfy --install-torch skip
+```
+
+Запуск ComfyUI после инициализации:
+
+```bash
+source "$COMFY_HOME/.venv/bin/activate"
+python "$COMFY_HOME/ComfyUI/main.py"
 ```
 
 ### Создание lock-версии
