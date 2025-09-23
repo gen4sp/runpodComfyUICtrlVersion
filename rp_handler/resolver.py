@@ -109,15 +109,31 @@ def install_python_packages(lock: Dict[str, object], verbose: bool) -> None:
 def verify_and_fetch_models(lock_path: Optional[str], env: Dict[str, str], verbose: bool, no_cache: bool = False) -> None:
     if not lock_path:
         return
-    script_path = pathlib.Path("/app/scripts/verify_models.py")
-    if not script_path.exists():
-        log_warn("verify_models.py not found in image; skipping model verification")
+
+    # Ищем скрипт verify_models.py в нескольких возможных местах:
+    # 1. /app/scripts/verify_models.py (Docker контейнер)
+    # 2. scripts/verify_models.py относительно текущего файла
+    # 3. scripts/verify_models.py относительно рабочей директории
+    possible_paths = [
+        pathlib.Path("/app/scripts/verify_models.py"),
+        pathlib.Path(__file__).parent.parent / "scripts" / "verify_models.py",
+        pathlib.Path.cwd() / "scripts" / "verify_models.py",
+    ]
+
+    script_path = None
+    for path in possible_paths:
+        if path.exists():
+            script_path = path
+            break
+
+    if not script_path:
+        log_warn("verify_models.py not found; skipping model verification")
         return
     # Если есть venv в $COMFY_HOME, используем его интерпретер для запуска скрипта
     python_exe = _venv_python_from_env() or _select_python_executable()
     args = [python_exe, str(script_path), "--lock", str(lock_path), "--models-dir", env["MODELS_DIR"], "--verbose"]
-    if no_cache:
-        args.append("--no-cache")
+    if not no_cache:
+        args.append("--cache")
     code, out, err = run(args)
     if code != 0:
         log_warn(f"verify_models failed ({code}): {err}")

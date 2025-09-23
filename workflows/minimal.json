@@ -1,0 +1,11 @@
+{
+    "1": {
+        "inputs": {
+            "text": "test"
+        },
+        "class_type": "CLIPTextEncode",
+        "_meta": {
+            "title": "CLIP Text Encode (Prompt)"
+        }
+    }
+}
