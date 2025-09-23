@@ -30,6 +30,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple
 import time
+import requests
 try:
     # Prefer absolute import for execution as a script from repo root
     from scripts.model_sources import (
@@ -427,26 +428,28 @@ def store_in_cache(cache_path: str, src_path: str) -> None:
 
 
 def download_http(url: str, dest_path: str, timeout: int = 60, headers: Optional[Dict[str, str]] = None, show_progress: bool = True) -> None:
-    req_headers = {"User-Agent": "runpod-comfy-yaml-verifier/1.0"}
+    req_headers = {
+        "User-Agent": os.environ.get("HTTP_USER_AGENT", "Mozilla/5.0"),
+        "Accept": "*/*",
+        "Referer": "https://civitai.com/",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "identity",
+    }
     if headers:
         req_headers.update(headers)
-    req = urllib.request.Request(url, headers=req_headers)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec - user-controlled URLs expected
-        total = resp.length if getattr(resp, "length", None) is not None else None
-        if total is None:
-            # Try header
-            total_hdr = resp.headers.get("Content-Length")
-            total = int(total_hdr) if total_hdr else None
+    with requests.get(url, headers=req_headers, stream=True, timeout=timeout, allow_redirects=True) as resp:
+        resp.raise_for_status()
+        total_header = resp.headers.get("Content-Length")
+        total = int(total_header) if total_header and total_header.isdigit() else None
         safe_makedirs(str(pathlib.Path(dest_path).parent))
         chunk = 1024 * 1024
         downloaded = 0
         last_print = 0.0
         start_ts = time.time()
         with open(dest_path, "wb") as f:
-            while True:
-                buf = resp.read(chunk)
+            for buf in resp.iter_content(chunk_size=chunk):
                 if not buf:
-                    break
+                    continue
                 f.write(buf)
                 downloaded += len(buf)
                 now = time.time()
@@ -751,6 +754,7 @@ def verify_single_model(yaml_file: str, model: Dict[str, object], env: Dict[str,
         tmp_parent = cache_dir
     else:
         tmp_parent = str(pathlib.Path(target_path).parent)
+    safe_makedirs(tmp_parent)
     tmp_dir = tempfile.mkdtemp(prefix="validate_yaml_", dir=tmp_parent)
     try:
         try:
