@@ -403,7 +403,7 @@ python3 scripts/repro_workflow_hash.py \
 
     ```bash
     python -m rp_handler.main \
-      --lock "/app/lockfiles/comfy-${COMFY_VERSION_NAME}.lock.json" \
-      --workflow /app/workflows/minimal.json \
+      --lock "lockfiles/comfy-${COMFY_VERSION_NAME}.lock.json" \
+      --workflow workflows/minimal.json \
       --output gcs | cat
     ```
