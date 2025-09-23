@@ -164,25 +164,49 @@ def get_model_size(source: str, timeout: int = 60) -> Optional[int]:
 
 
 def get_disk_free_space(path: str) -> int:
-    """Get free disk space in bytes for the given path."""
-    try:
-        # For RunPod volumes and other network filesystems, os.statvfs may report incorrect values
-        # Use 'df' command which provides more accurate information
-        result = run_command(["df", "-k", path])  # -k for kilobytes
-        if result[0] == 0:  # success
-            lines = result[1].strip().split('\n')
-            if len(lines) >= 2:
-                # Parse df output: last line contains the filesystem info
-                parts = lines[-1].split()
-                if len(parts) >= 4:
-                    # Available space in kilobytes (parts[3])
-                    available_kb = int(parts[3])
-                    return available_kb * 1024  # Convert to bytes
+    """Get free disk space in bytes for the given path.
 
-        # Fallback to os.statvfs if df fails
-        log_warn(f"df command failed for {path}, falling back to os.statvfs")
-        statvfs = os.statvfs(path)
-        return statvfs.f_frsize * statvfs.f_bavail  # Free blocks available to non-superuser
+    - Uses `df -Pk` for consistent, single-line, 1024-block output across platforms.
+    - If the path does not exist, walks up to the nearest existing parent to query the correct filesystem.
+    - Falls back to shutil.disk_usage/os.statvfs on failure.
+    """
+    try:
+        query_path = path
+        try:
+            if not os.path.exists(query_path):
+                p = pathlib.Path(query_path)
+                # Walk up until we find an existing directory; fallback to root
+                while not p.exists() and p != p.parent:
+                    p = p.parent
+                if not p.exists():
+                    p = pathlib.Path("/")
+                query_path = str(p)
+        except Exception:
+            # If anything goes wrong determining parent, just fallback to root
+            query_path = "/"
+
+        # Prefer POSIX-format, kilobyte blocks to avoid wrapping/locale issues
+        code, out, err = run_command(["df", "-Pk", query_path])
+        if code == 0 and out:
+            lines = [ln for ln in out.splitlines() if ln.strip()]
+            # Find a data line (non-header). With -P there should be exactly one
+            data_lines = [ln for ln in lines if not ln.lower().startswith("filesystem")]
+            line = data_lines[-1] if data_lines else (lines[-1] if len(lines) >= 2 else "")
+            if line:
+                parts = line.split()
+                # parts layout for -P: Filesystem, 1024-blocks, Used, Available, Use%/Capacity, Mounted on
+                if len(parts) >= 4:
+                    available_kb = int(parts[3])
+                    return available_kb * 1024
+
+        # Fallbacks
+        log_warn(f"df command failed for {query_path} (orig: {path}), falling back to shutil.disk_usage/statvfs")
+        try:
+            usage = shutil.disk_usage(query_path)
+            return int(usage.free)
+        except Exception:
+            statvfs = os.statvfs(query_path)
+            return statvfs.f_frsize * statvfs.f_bavail
     except Exception as exc:
         log_error(f"Failed to get disk free space for {path}: {exc}")
         return 0
@@ -533,6 +557,16 @@ def check_disk_space(yaml_files: List[str], models_dir: Optional[str], cache_dir
         comfy_home = env["COMFY_HOME"]
         resolved_cache_dir = str(pathlib.Path(comfy_home) / ".cache" / "models")
 
+    # Ensure directories exist so that disk space is checked on the correct mount point
+    try:
+        safe_makedirs(env["MODELS_DIR"])
+    except Exception:
+        pass
+    try:
+        safe_makedirs(resolved_cache_dir)
+    except Exception:
+        pass
+
     # Collect all models that need to be downloaded
     models_to_check = []
     total_size = 0
@@ -576,13 +610,15 @@ def check_disk_space(yaml_files: List[str], models_dir: Optional[str], cache_dir
     models_disk_free = get_disk_free_space(env["MODELS_DIR"])
     cache_disk_free = get_disk_free_space(resolved_cache_dir)
 
-    # Use the minimum free space
+    # Use the minimum free space (both locations must have enough for temp + final)
     available_space = min(models_disk_free, cache_disk_free)
 
     log_info("Проверка места на диске:")
     log_info(f"  Моделей к загрузке: {len(models_to_check)}")
     log_info(f"  Общий размер моделей: {format_bytes(total_size)}")
-    log_info(f"  Доступное место: {format_bytes(available_space)}")
+    log_info(f"  Свободно в MODELS_DIR ({env['MODELS_DIR']}): {format_bytes(models_disk_free)}")
+    log_info(f"  Свободно в CACHE ({resolved_cache_dir}): {format_bytes(cache_disk_free)}")
+    log_info(f"  Будет использовано минимальное доступное: {format_bytes(available_space)}")
 
     if unknown_sizes:
         log_warn(f"Размер неизвестен для моделей: {', '.join(unknown_sizes)}")
