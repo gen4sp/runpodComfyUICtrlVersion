@@ -224,6 +224,141 @@ def format_bytes(bytes_value: int) -> str:
 # ----------------------------- Cache management ----------------------------- #
 
 
+# ------------------------ RunPod volume quota helpers ------------------------ #
+
+
+def _parse_int_env(names: List[str]) -> Optional[int]:
+    for name in names:
+        val = os.environ.get(name)
+        if val:
+            try:
+                return int(val)
+            except Exception:
+                try:
+                    return int(float(val))
+                except Exception:
+                    continue
+    return None
+
+
+def get_runpod_quota_bytes() -> Optional[int]:
+    """Return declared RunPod volume quota in bytes if provided via env.
+
+    Supported env names (first match wins):
+      - RUNPOD_VOLUME_QUOTA_BYTES, RUNPOD_VOLUME_SIZE_BYTES, RUNPOD_VOLUME_BYTES
+      - RUNPOD_VOLUME_QUOTA_GB, RUNPOD_VOLUME_SIZE_GB, RUNPOD_VOLUME_GB (GiB)
+    """
+    # Bytes first
+    bytes_val = _parse_int_env([
+        "RUNPOD_VOLUME_QUOTA_BYTES",
+        "RUNPOD_VOLUME_SIZE_BYTES",
+        "RUNPOD_VOLUME_BYTES",
+    ])
+    if bytes_val is not None and bytes_val > 0:
+        return bytes_val
+
+    # Then GB (GiB)
+    gb_val = _parse_int_env([
+        "RUNPOD_VOLUME_QUOTA_GB",
+        "RUNPOD_VOLUME_SIZE_GB",
+        "RUNPOD_VOLUME_GB",
+    ])
+    if gb_val is not None and gb_val > 0:
+        return int(gb_val * 1024 * 1024 * 1024)
+
+    return None
+
+
+def get_runpod_mount_root() -> str:
+    return os.environ.get("RUNPOD_VOLUME_ROOT", "/runpod-volume")
+
+
+def is_under_path(path: str, root: str) -> bool:
+    try:
+        path_abs = str(pathlib.Path(path).resolve())
+        root_abs = str(pathlib.Path(root).resolve())
+        return path_abs == root_abs or path_abs.startswith(root_abs.rstrip("/") + "/")
+    except Exception:
+        return False
+
+
+def get_directory_disk_usage_bytes(path: str) -> int:
+    """Return directory used size in bytes (best-effort, fast path via du -sk)."""
+    try:
+        code, out, err = run_command(["du", "-sk", path])
+        if code == 0 and out:
+            first_token = out.strip().split()[0]
+            used_kb = int(first_token)
+            return used_kb * 1024
+    except Exception:
+        pass
+    # Fallback: python walk (may be slow on large trees)
+    total = 0
+    try:
+        for dirpath, dirnames, filenames in os.walk(path):
+            for fname in filenames:
+                fpath = os.path.join(dirpath, fname)
+                try:
+                    total += os.path.getsize(fpath)
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return total
+
+
+def get_effective_free_space(path: str) -> int:
+    """Return free space in bytes for a path, considering RunPod quotas if provided.
+
+    If the path resides under RUNPOD volume root and quota env is set, compute:
+        free = max(0, quota_bytes - used_bytes(runpod_root))
+    Otherwise, fallback to get_disk_free_space(path).
+    """
+    try:
+        runpod_root = get_runpod_mount_root()
+        quota_bytes = get_runpod_quota_bytes()
+        if quota_bytes and is_under_path(path, runpod_root):
+            # Use DU on the root of volume to reflect user's allocated usage
+            used_bytes = get_directory_disk_usage_bytes(runpod_root)
+            free_bytes = quota_bytes - used_bytes
+            if free_bytes < 0:
+                free_bytes = 0
+            return free_bytes
+    except Exception:
+        # Fall back if anything goes wrong
+        pass
+    return get_disk_free_space(path)
+
+
+def _log_enospc_context(name: str, source: object, target_path: str, cache_dir: str, tmp_path: Optional[str]) -> None:
+    """Print contextual info for ENOSPC: sizes and free space per relevant dirs."""
+    try:
+        # Estimate size
+        size_bytes = None
+        try:
+            size_bytes = get_model_size(str(source), timeout=30) if isinstance(source, str) else None
+        except Exception:
+            size_bytes = None
+
+        target_dir = str(pathlib.Path(target_path).parent)
+        free_target = get_effective_free_space(target_dir)
+        free_cache = get_effective_free_space(cache_dir)
+        tmp_dir = str(pathlib.Path(tmp_path).parent) if tmp_path else cache_dir
+        free_tmp = get_effective_free_space(tmp_dir)
+
+        log_error("Недостаточно места на диске (ENOSPC):")
+        log_error(f"  Модель: {name}")
+        if size_bytes is not None:
+            log_error(f"  Размер артефакта: {format_bytes(size_bytes)}")
+        else:
+            log_error("  Размер артефакта: неизвестен")
+        log_error(f"  Свободно в каталоге назначения ({target_dir}): {format_bytes(free_target)}")
+        log_error(f"  Свободно в кэше ({cache_dir}): {format_bytes(free_cache)}")
+        log_error(f"  Свободно во временном каталоге ({tmp_dir}): {format_bytes(free_tmp)}")
+    except Exception as exc:
+        log_warn(f"Не удалось вывести контекст ENOSPC: {exc}")
+
+
 def cache_key_path(cache_dir: str, checksum_value: Optional[str], fallback_name: str) -> Tuple[str, str]:
     """Return (dir, path) for a cache entry.
 
@@ -515,7 +650,17 @@ def verify_single_model(yaml_file: str, model: Dict[str, object], env: Dict[str,
     # Fetch from source to temp
     tmp_dir = tempfile.mkdtemp(prefix="validate_yaml_")
     try:
-        tmp_download = fetch_to_temp(source, tmp_dir=tmp_dir, timeout=timeout)
+        try:
+            tmp_download = fetch_to_temp(source, tmp_dir=tmp_dir, timeout=timeout)
+        except OSError as exc:
+            if getattr(exc, "errno", None) == 28:
+                # No space left when downloading to temp/cache area
+                try:
+                    _log_enospc_context(name=name, source=source, target_path=target_path, cache_dir=cache_dir, tmp_path=None)
+                except Exception:
+                    pass
+                return VerifyResult(yaml_file=yaml_file, name=name, target_path=target_path, status="error", message="no space left on device (downloading)")
+            raise
         # Validate checksum if expected
         if expected_algo and expected_hex:
             actual = compute_checksum(tmp_download, algo=expected_algo)
@@ -534,10 +679,26 @@ def verify_single_model(yaml_file: str, model: Dict[str, object], env: Dict[str,
         _, cache_entry_path = cache_key_path(cache_dir, expected_checksum, pathlib.Path(target_path).name)
         try:
             store_in_cache(cache_entry_path, tmp_download)
-        except Exception as exc:
-            log_warn(f"cache store failed for {name}: {exc}")
+        except OSError as exc:
+            if getattr(exc, "errno", None) == 28:
+                try:
+                    _log_enospc_context(name=name, source=source, target_path=target_path, cache_dir=cache_dir, tmp_path=tmp_download)
+                except Exception:
+                    pass
+                return VerifyResult(yaml_file=yaml_file, name=name, target_path=target_path, status="error", message="no space left on device (caching)")
+            else:
+                log_warn(f"cache store failed for {name}: {exc}")
 
-        atomic_copy(cache_entry_path if os.path.exists(cache_entry_path) else tmp_download, target_path)
+        try:
+            atomic_copy(cache_entry_path if os.path.exists(cache_entry_path) else tmp_download, target_path)
+        except OSError as exc:
+            if getattr(exc, "errno", None) == 28:
+                try:
+                    _log_enospc_context(name=name, source=source, target_path=target_path, cache_dir=cache_dir, tmp_path=tmp_download)
+                except Exception:
+                    pass
+                return VerifyResult(yaml_file=yaml_file, name=name, target_path=target_path, status="error", message="no space left on device (final copy)")
+            raise
         return VerifyResult(yaml_file=yaml_file, name=name, target_path=target_path, status=("updated" if os.path.exists(target_path) else "downloaded"), message="fetched from source")
     finally:
         try:
@@ -606,9 +767,9 @@ def check_disk_space(yaml_files: List[str], models_dir: Optional[str], cache_dir
         log_info("Все модели уже присутствуют, проверка места на диске не требуется")
         return True
 
-    # Check disk space for models directory and cache directory
-    models_disk_free = get_disk_free_space(env["MODELS_DIR"])
-    cache_disk_free = get_disk_free_space(resolved_cache_dir)
+    # Check disk space for models directory and cache directory using effective (quota-aware) values
+    models_disk_free = get_effective_free_space(env["MODELS_DIR"])
+    cache_disk_free = get_effective_free_space(resolved_cache_dir)
 
     # Use the minimum free space (both locations must have enough for temp + final)
     available_space = min(models_disk_free, cache_disk_free)
