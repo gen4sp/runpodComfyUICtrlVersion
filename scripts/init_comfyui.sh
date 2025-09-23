@@ -65,7 +65,7 @@ if [ -z "$VENV_PATH" ]; then
   VENV_PATH="$COMFY_HOME/.venv"
 fi
 
-REPO_DIR="$COMFY_HOME/ComfyUI"
+REPO_DIR="$COMFY_HOME"
 
 mkdir -p "$COMFY_HOME"
 
