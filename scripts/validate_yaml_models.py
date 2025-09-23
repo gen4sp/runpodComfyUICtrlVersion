@@ -426,7 +426,9 @@ def derive_env(models_dir: Optional[str]) -> Dict[str, str]:
         env["COMFY_HOME"] = comfy_home
     else:
         env["COMFY_HOME"] = str((pathlib.Path.cwd() / "comfy").resolve())
-    env["MODELS_DIR"] = models_dir or str(pathlib.Path(env["COMFY_HOME"]) / "models")
+
+    models_dir_env = os.environ.get("MODELS_DIR")
+    env["MODELS_DIR"] = models_dir or models_dir_env or str(pathlib.Path(env["COMFY_HOME"]) / "models")
     return env
 
 
