@@ -152,8 +152,11 @@ def store_in_cache(cache_path: str, src_path: str) -> None:
 # ------------------------------- Downloaders -------------------------------- #
 
 
-def download_http(url: str, dest_path: str, timeout: int = 60) -> None:
-    req = urllib.request.Request(url, headers={"User-Agent": "runpod-comfy-verifier/1.0"})
+def download_http(url: str, dest_path: str, timeout: int = 60, headers: Optional[Dict[str, str]] = None) -> None:
+    req_headers = {"User-Agent": "runpod-comfy-verifier/1.0"}
+    if headers:
+        req_headers.update(headers)
+    req = urllib.request.Request(url, headers=req_headers)
     with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec - user-controlled URLs expected
         safe_makedirs(str(pathlib.Path(dest_path).parent))
         with open(dest_path, "wb") as f:
@@ -184,6 +187,48 @@ def download_gs(url: str, dest_path: str) -> None:
         raise RuntimeError(f"gsutil cp failed: {err}")
 
 
+def build_hf_resolve_url(repo_id: str, revision: str, path_in_repo: str) -> str:
+    repo_id_quoted = "/".join(urllib.parse.quote(part, safe="") for part in repo_id.split("/"))
+    path_quoted = urllib.parse.quote(path_in_repo.lstrip("/"), safe="/")
+    rev_quoted = urllib.parse.quote(revision, safe="")
+    return f"https://huggingface.co/{repo_id_quoted}/resolve/{rev_quoted}/{path_quoted}?download=true"
+
+
+def parse_hf_source(source: str) -> Tuple[str, str, str]:
+    parsed = urllib.parse.urlparse(source)
+    if parsed.scheme not in ("hf", "huggingface"):
+        raise ValueError("not an hf url")
+    org = parsed.netloc
+    path = parsed.path.lstrip("/")
+    if not org or not path:
+        raise ValueError("Invalid hf url. Expected hf://<org>/<repo>/<file>[?rev=...] or hf://<org>/<repo>@<rev>/<file>")
+    segments = path.split("/")
+    repo_segment = segments[0]
+    path_segments = segments[1:]
+    if not path_segments:
+        raise ValueError("hf url must include a file path inside repo")
+    revision: Optional[str] = None
+    if "@" in repo_segment:
+        repo_name, revision = repo_segment.split("@", 1)
+    else:
+        repo_name = repo_segment
+    qs = urllib.parse.parse_qs(parsed.query)
+    if not revision:
+        rev_list = qs.get("rev") or qs.get("revision")
+        revision = rev_list[0] if rev_list else "main"
+    repo_id = f"{org}/{repo_name}"
+    path_in_repo = "/".join(path_segments)
+    return repo_id, revision, path_in_repo
+
+
+def download_hf(source: str, dest_path: str, timeout: int = 60) -> None:
+    repo_id, revision, path_in_repo = parse_hf_source(source)
+    resolve_url = build_hf_resolve_url(repo_id, revision, path_in_repo)
+    token = os.environ.get("HUGGINGFACE_TOKEN") or os.environ.get("HF_TOKEN")
+    headers = {"Authorization": f"Bearer {token}"} if token else None
+    download_http(resolve_url, dest_path, timeout=timeout, headers=headers)
+
+
 def fetch_to_temp(source: str, tmp_dir: str, timeout: int = 60) -> str:
     parsed = urllib.parse.urlparse(source)
     filename = pathlib.Path(parsed.path or "artifact").name or "artifact"
@@ -196,6 +241,8 @@ def fetch_to_temp(source: str, tmp_dir: str, timeout: int = 60) -> str:
             download_file(source, tmp_path)
         elif parsed.scheme in ("gs", "gsutil") or source.startswith("gs://"):
             download_gs(source, tmp_path)
+        elif parsed.scheme in ("hf", "huggingface"):
+            download_hf(source, tmp_path, timeout=timeout)
         else:
             # Treat as local filesystem path
             download_file(source, tmp_path)

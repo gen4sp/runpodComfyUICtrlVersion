@@ -112,6 +112,45 @@ python3 scripts/verify_models.py --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock
 -   **http/https** — прямые ссылки на файлы.
 -   **file** — локальные пути или `file:///...`.
 -   **gs://...** — требуется установленный `gsutil` (Google Cloud SDK).
+-   **hf://...** или **huggingface://...** — файлы из репозиториев Hugging Face. Поддерживаются публичные и приватные репозитории (через токен).
+
+Hugging Face источники (`hf://`):
+
+-   Формат URL:
+
+    -   `hf://<org>/<repo>@<rev>/<path/inside/repo>`
+    -   `hf://<org>/<repo>/<path/inside/repo>?rev=<rev>`
+
+-   Ревизия `<rev>` по умолчанию `main`.
+-   Для приватных репозиториев укажите токен в окружении: `HUGGINGFACE_TOKEN` или `HF_TOKEN`.
+-   Примеры:
+
+    ```bash
+    # Публичный файл по конкретному коммиту
+    hf://stabilityai/stable-diffusion-2-1@<commit-sha>/v1-5-pruned.safetensors
+
+    # С ревизией через query
+    hf://runwayml/stable-diffusion-v1-5/v1-5-pruned.safetensors?rev=main
+
+    # Приватный репозиторий (токен из окружения)
+    export HUGGINGFACE_TOKEN="hf_..."
+    hf://myorg/private-model@v1.0/model.safetensors
+    ```
+
+Пример секции `models` в lock-файле с Hugging Face:
+
+```json
+{
+    "models": [
+        {
+            "name": "sd15",
+            "source": "hf://runwayml/stable-diffusion-v1-5/v1-5-pruned.safetensors?rev=main",
+            "target_path": "$MODELS_DIR/checkpoints/sd15.safetensors",
+            "checksum": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        }
+    ]
+}
+```
 
 Подстановка переменных в `target_path`:
 
