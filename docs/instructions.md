@@ -73,9 +73,9 @@ python3 scripts/create_version.py --name "$COMFY_VERSION_NAME" \
 
 По умолчанию скрипт ищет пути на основе `COMFY_HOME`:
 
--   `ComfyUI` по адресу: `$COMFY_HOME/ComfyUI` (если не задано `--comfy-path`).
+-   `ComfyUI` по адресу: `$COMFY_HOME` (если это git‑репозиторий; иначе используется `$COMFY_HOME/ComfyUI`, либо можно указать явный `--comfy-path`).
 -   `venv` для `pip freeze`: `$COMFY_HOME/.venv` (если не задано `--venv`).
--   базовый каталог моделей: `$COMFY_HOME/models` (используется только для экспансии путей в чек-суммах).
+-   базовый каталог моделей: `$COMFY_HOME/models` (используется только для экспансии путей в чек‑суммах).
 
 Ключевые параметры:
 

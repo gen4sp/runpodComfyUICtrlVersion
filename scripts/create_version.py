@@ -78,8 +78,14 @@ def expand_env(path: str, extra_env: Optional[Dict[str, str]] = None) -> str:
 
 
 def is_git_repo(path: str) -> bool:
-    code, _, _ = run_command(["git", "rev-parse", "--is-inside-work-tree"], cwd=path)
-    return code == 0
+    p = pathlib.Path(path)
+    if not p.exists() or not p.is_dir():
+        return False
+    try:
+        code, _, _ = run_command(["git", "rev-parse", "--is-inside-work-tree"], cwd=str(p))
+        return code == 0
+    except FileNotFoundError:
+        return False
 
 
 def git_current_commit(path: str) -> Optional[str]:
@@ -372,7 +378,14 @@ def derive_defaults(args: argparse.Namespace) -> Tuple[str, str, Dict[str, str]]
         # Default to ./comfy to match init script fallback
         env["COMFY_HOME"] = str((pathlib.Path.cwd() / "comfy").resolve())
 
-    comfy_path = args.comfy_path or str(pathlib.Path(env["COMFY_HOME"]) / "ComfyUI")
+    if args.comfy_path:
+        comfy_path = args.comfy_path
+    else:
+        comfy_home_path = pathlib.Path(env["COMFY_HOME"])  # may be repo root
+        if comfy_home_path.exists() and is_git_repo(str(comfy_home_path)):
+            comfy_path = str(comfy_home_path)
+        else:
+            comfy_path = str(comfy_home_path / "ComfyUI")
     models_dir = args.models_dir or str(pathlib.Path(env["COMFY_HOME"]) / "models")
     return comfy_path, models_dir, env
 
