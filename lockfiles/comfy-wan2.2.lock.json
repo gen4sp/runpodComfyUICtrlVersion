@@ -1,0 +1,420 @@
+{
+  "comfyui": {
+    "commit": "707b2638ecd82360c0a67e1d86cc4fdeae218d03",
+    "path": "/Users/gen4/Gits/Research/RunPod/runpodComfyuiVersionControl/comfy/ComfyUI",
+    "repo": "https://github.com/comfyanonymous/ComfyUI.git"
+  },
+  "custom_nodes": [
+    {
+      "commit": "b8c2bb0a938f1062347f036f52e0cdaecda2952e",
+      "name": "ComfyUI-WanVideoWrapper",
+      "path": "/Users/gen4/Gits/Research/RunPod/runpodComfyuiVersionControl/comfy/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper",
+      "repo": "https://github.com/kijai/ComfyUI-WanVideoWrapper.git"
+    },
+    {
+      "commit": null,
+      "name": "WanVideoWrapper",
+      "path": "",
+      "repo": "https://github.com/kijai/ComfyUI-WanVideoWrapper"
+    }
+  ],
+  "models": [
+    {
+      "checksum": null,
+      "name": "wan2.2-i2v-14b",
+      "source": "hf://Wan-AI/Wan2.2-I2V-14B-480P/Wan2.2_I2V_14B_480P_fp16.safetensors",
+      "target_path": "$MODELS_DIR/wan/Wan2.2_I2V_14B_480P_fp16.safetensors"
+    },
+    {
+      "checksum": null,
+      "name": "wan2.2-t2v-1.3b",
+      "source": "hf://Wan-AI/Wan2.2-T2V-1.3B/Wan2.2_T2V_1.3B_fp16.safetensors",
+      "target_path": "$MODELS_DIR/wan/Wan2.2_T2V_1.3B_fp16.safetensors"
+    },
+    {
+      "checksum": null,
+      "name": "wan2.2-t2v-14b",
+      "source": "hf://Wan-AI/Wan2.2-T2V-14B/Wan2.2_T2V_14B_fp16.safetensors",
+      "target_path": "$MODELS_DIR/wan/Wan2.2_T2V_14B_fp16.safetensors"
+    },
+    {
+      "checksum": null,
+      "name": "wan2.2-vae",
+      "source": "hf://Wan-AI/Wan2.2-VAE/Wan2.2_VAE_fp16.safetensors",
+      "target_path": "$MODELS_DIR/vae/Wan2.2_VAE_fp16.safetensors"
+    }
+  ],
+  "python": {
+    "interpreter": "/Users/gen4/Gits/Research/RunPod/runpodComfyuiVersionControl/comfy/.venv/bin/python",
+    "packages": [
+      {
+        "name": "accelerate",
+        "url": null,
+        "version": "1.10.1"
+      },
+      {
+        "name": "aiohappyeyeballs",
+        "url": null,
+        "version": "2.6.1"
+      },
+      {
+        "name": "aiohttp",
+        "url": null,
+        "version": "3.12.15"
+      },
+      {
+        "name": "aiosignal",
+        "url": null,
+        "version": "1.4.0"
+      },
+      {
+        "name": "alembic",
+        "url": null,
+        "version": "1.16.5"
+      },
+      {
+        "name": "annotated-types",
+        "url": null,
+        "version": "0.7.0"
+      },
+      {
+        "name": "attrs",
+        "url": null,
+        "version": "25.3.0"
+      },
+      {
+        "name": "av",
+        "url": null,
+        "version": "15.1.0"
+      },
+      {
+        "name": "certifi",
+        "url": null,
+        "version": "2025.8.3"
+      },
+      {
+        "name": "cffi",
+        "url": null,
+        "version": "2.0.0"
+      },
+      {
+        "name": "charset-normalizer",
+        "url": null,
+        "version": "3.4.3"
+      },
+      {
+        "name": "comfyui-embedded-docs",
+        "url": null,
+        "version": "0.2.6"
+      },
+      {
+        "name": "comfyui_frontend_package",
+        "url": null,
+        "version": "1.26.13"
+      },
+      {
+        "name": "comfyui_workflow_templates",
+        "url": null,
+        "version": "0.1.81"
+      },
+      {
+        "name": "diffusers",
+        "url": null,
+        "version": "0.35.1"
+      },
+      {
+        "name": "einops",
+        "url": null,
+        "version": "0.8.1"
+      },
+      {
+        "name": "filelock",
+        "url": null,
+        "version": "3.19.1"
+      },
+      {
+        "name": "frozenlist",
+        "url": null,
+        "version": "1.7.0"
+      },
+      {
+        "name": "fsspec",
+        "url": null,
+        "version": "2025.9.0"
+      },
+      {
+        "name": "ftfy",
+        "url": null,
+        "version": "6.3.1"
+      },
+      {
+        "name": "future",
+        "url": null,
+        "version": "1.0.0"
+      },
+      {
+        "name": "gguf",
+        "url": null,
+        "version": "0.17.1"
+      },
+      {
+        "name": "greenlet",
+        "url": null,
+        "version": "3.2.4"
+      },
+      {
+        "name": "hf-xet",
+        "url": null,
+        "version": "1.1.10"
+      },
+      {
+        "name": "huggingface-hub",
+        "url": null,
+        "version": "0.35.1"
+      },
+      {
+        "name": "idna",
+        "url": null,
+        "version": "3.10"
+      },
+      {
+        "name": "importlib_metadata",
+        "url": null,
+        "version": "8.7.0"
+      },
+      {
+        "name": "Jinja2",
+        "url": null,
+        "version": "3.1.6"
+      },
+      {
+        "name": "kornia",
+        "url": null,
+        "version": "0.8.1"
+      },
+      {
+        "name": "kornia_rs",
+        "url": null,
+        "version": "0.1.9"
+      },
+      {
+        "name": "Mako",
+        "url": null,
+        "version": "1.3.10"
+      },
+      {
+        "name": "MarkupSafe",
+        "url": null,
+        "version": "3.0.2"
+      },
+      {
+        "name": "mpmath",
+        "url": null,
+        "version": "1.3.0"
+      },
+      {
+        "name": "multidict",
+        "url": null,
+        "version": "6.6.4"
+      },
+      {
+        "name": "networkx",
+        "url": null,
+        "version": "3.5"
+      },
+      {
+        "name": "numpy",
+        "url": null,
+        "version": "2.2.6"
+      },
+      {
+        "name": "opencv-python",
+        "url": null,
+        "version": "4.12.0.88"
+      },
+      {
+        "name": "packaging",
+        "url": null,
+        "version": "25.0"
+      },
+      {
+        "name": "peft",
+        "url": null,
+        "version": "0.17.1"
+      },
+      {
+        "name": "pillow",
+        "url": null,
+        "version": "11.3.0"
+      },
+      {
+        "name": "propcache",
+        "url": null,
+        "version": "0.3.2"
+      },
+      {
+        "name": "protobuf",
+        "url": null,
+        "version": "6.32.1"
+      },
+      {
+        "name": "psutil",
+        "url": null,
+        "version": "7.1.0"
+      },
+      {
+        "name": "pycparser",
+        "url": null,
+        "version": "2.23"
+      },
+      {
+        "name": "pydantic",
+        "url": null,
+        "version": "2.11.9"
+      },
+      {
+        "name": "pydantic-settings",
+        "url": null,
+        "version": "2.10.1"
+      },
+      {
+        "name": "pydantic_core",
+        "url": null,
+        "version": "2.33.2"
+      },
+      {
+        "name": "pyloudnorm",
+        "url": null,
+        "version": "0.1.1"
+      },
+      {
+        "name": "python-dotenv",
+        "url": null,
+        "version": "1.1.1"
+      },
+      {
+        "name": "PyYAML",
+        "url": null,
+        "version": "6.0.2"
+      },
+      {
+        "name": "regex",
+        "url": null,
+        "version": "2025.9.18"
+      },
+      {
+        "name": "requests",
+        "url": null,
+        "version": "2.32.5"
+      },
+      {
+        "name": "safetensors",
+        "url": null,
+        "version": "0.6.2"
+      },
+      {
+        "name": "scipy",
+        "url": null,
+        "version": "1.16.2"
+      },
+      {
+        "name": "sentencepiece",
+        "url": null,
+        "version": "0.2.1"
+      },
+      {
+        "name": "soundfile",
+        "url": null,
+        "version": "0.13.1"
+      },
+      {
+        "name": "spandrel",
+        "url": null,
+        "version": "0.4.1"
+      },
+      {
+        "name": "SQLAlchemy",
+        "url": null,
+        "version": "2.0.43"
+      },
+      {
+        "name": "sympy",
+        "url": null,
+        "version": "1.14.0"
+      },
+      {
+        "name": "tokenizers",
+        "url": null,
+        "version": "0.22.1"
+      },
+      {
+        "name": "torch",
+        "url": null,
+        "version": "2.2.2"
+      },
+      {
+        "name": "torchaudio",
+        "url": null,
+        "version": "2.2.2"
+      },
+      {
+        "name": "torchsde",
+        "url": null,
+        "version": "0.2.6"
+      },
+      {
+        "name": "torchvision",
+        "url": null,
+        "version": "0.17.2"
+      },
+      {
+        "name": "tqdm",
+        "url": null,
+        "version": "4.67.1"
+      },
+      {
+        "name": "trampoline",
+        "url": null,
+        "version": "0.1.2"
+      },
+      {
+        "name": "transformers",
+        "url": null,
+        "version": "4.56.2"
+      },
+      {
+        "name": "typing-inspection",
+        "url": null,
+        "version": "0.4.1"
+      },
+      {
+        "name": "typing_extensions",
+        "url": null,
+        "version": "4.15.0"
+      },
+      {
+        "name": "urllib3",
+        "url": null,
+        "version": "2.5.0"
+      },
+      {
+        "name": "wcwidth",
+        "url": null,
+        "version": "0.2.14"
+      },
+      {
+        "name": "yarl",
+        "url": null,
+        "version": "1.20.1"
+      },
+      {
+        "name": "zipp",
+        "url": null,
+        "version": "3.23.0"
+      }
+    ],
+    "version": "3.11.9"
+  },
+  "schema_version": 1,
+  "version_name": "wan2.2"
+}

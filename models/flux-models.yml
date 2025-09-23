@@ -1,0 +1,10 @@
+models:
+    - name: "flux1-dev-kontext-fp8-scaled"
+      source: "hf://Comfy-Org/flux1-kontext-dev_ComfyUI/split_files/diffusion_models/flux1-dev-kontext_fp8_scaled.safetensors"
+      target_path: "$MODELS_DIR/unet/flux1-dev-kontext_fp8_scaled.safetensors"
+    - name: "t5xxl-fp8-e4m3fn-scaled"
+      source: "hf://comfyanonymous/flux_text_encoders/t5xxl_fp8_e4m3fn_scaled.safetensors"
+      target_path: "$MODELS_DIR/clip/t5xxl_fp8_e4m3fn_scaled.safetensors"
+    - name: "flux-ae"
+      source: "hf://flux-safetensors/flux-safetensors/ae.safetensors"
+      target_path: "$MODELS_DIR/vae/ae.safetensors"

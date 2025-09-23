@@ -1,0 +1,10 @@
+models:
+    - name: "hunyuan-video-clip-l"
+      source: "hf://Comfy-Org/HunyuanVideo_repackaged/split_files/text_encoders/clip_l.safetensors"
+      target_path: "$MODELS_DIR/text_encoders/clip_l.safetensors"
+    - name: "hunyuan-video-llava-llama3-fp16"
+      source: "hf://Comfy-Org/HunyuanVideo_repackaged/split_files/text_encoders/llava_llama3_fp16.safetensors"
+      target_path: "$MODELS_DIR/text_encoders/llava_llama3_fp16.safetensors"
+    - name: "hunyuan-video-llava-llama3-fp8-scaled"
+      source: "hf://Comfy-Org/HunyuanVideo_repackaged/split_files/text_encoders/llava_llama3_fp8_scaled.safetensors"
+      target_path: "$MODELS_DIR/text_encoders/llava_llama3_fp8_scaled.safetensors"
