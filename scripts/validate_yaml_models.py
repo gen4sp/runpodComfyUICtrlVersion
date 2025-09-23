@@ -30,6 +30,23 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple
 import time
+try:
+    # Prefer absolute import for execution as a script from repo root
+    from scripts.model_sources import (
+        civitai_get_size_bytes,
+        civitai_build_download_url_and_headers,
+    )
+except Exception:
+    try:
+        # Fallback when executed via "python scripts/validate_yaml_models.py" (sys.path[0] == scripts/)
+        from model_sources import (
+            civitai_get_size_bytes,  # type: ignore
+            civitai_build_download_url_and_headers,  # type: ignore
+        )
+    except Exception:
+        # Last resort: disable civitai support
+        civitai_get_size_bytes = None  # type: ignore[assignment]
+        civitai_build_download_url_and_headers = None  # type: ignore[assignment]
 
 
 # ----------------------------- Small utilities ----------------------------- #
@@ -134,6 +151,11 @@ def get_model_size(source: str, timeout: int = 60) -> Optional[int]:
                 content_length = resp.headers.get("Content-Length")
                 if content_length:
                     return int(content_length)
+        elif parsed.scheme in ("civitai",):
+            if civitai_get_size_bytes:
+                size = civitai_get_size_bytes(source, timeout=timeout)
+                if isinstance(size, int) and size > 0:
+                    return size
         elif parsed.scheme in ("hf", "huggingface"):
             # Build resolve URL and get size
             repo_id, revision, path_in_repo = parse_hf_source(source)
@@ -520,6 +542,11 @@ def fetch_to_temp(source: str, tmp_dir: str, timeout: int = 60) -> str:
             download_gs(source, tmp_path)
         elif parsed.scheme in ("hf", "huggingface"):
             download_hf(source, tmp_path, timeout=timeout)
+        elif parsed.scheme in ("civitai",):
+            if not civitai_build_download_url_and_headers:
+                raise RuntimeError("civitai support is unavailable in this environment")
+            url, headers = civitai_build_download_url_and_headers(source)
+            download_http(url, tmp_path, timeout=timeout, headers=headers)
         else:
             # Treat as local filesystem path
             download_file(source, tmp_path)
