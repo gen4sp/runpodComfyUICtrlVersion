@@ -166,6 +166,21 @@ def get_model_size(source: str, timeout: int = 60) -> Optional[int]:
 def get_disk_free_space(path: str) -> int:
     """Get free disk space in bytes for the given path."""
     try:
+        # For RunPod volumes and other network filesystems, os.statvfs may report incorrect values
+        # Use 'df' command which provides more accurate information
+        result = run_command(["df", "-k", path])  # -k for kilobytes
+        if result[0] == 0:  # success
+            lines = result[1].strip().split('\n')
+            if len(lines) >= 2:
+                # Parse df output: last line contains the filesystem info
+                parts = lines[-1].split()
+                if len(parts) >= 4:
+                    # Available space in kilobytes (parts[3])
+                    available_kb = int(parts[3])
+                    return available_kb * 1024  # Convert to bytes
+
+        # Fallback to os.statvfs if df fails
+        log_warn(f"df command failed for {path}, falling back to os.statvfs")
         statvfs = os.statvfs(path)
         return statvfs.f_frsize * statvfs.f_bavail  # Free blocks available to non-superuser
     except Exception as exc:
