@@ -113,6 +113,7 @@ python3 scripts/verify_models.py --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock
 -   **file** — локальные пути или `file:///...`.
 -   **gs://...** — требуется установленный `gsutil` (Google Cloud SDK).
 -   **hf://...** или **huggingface://...** — файлы из репозиториев Hugging Face. Поддерживаются публичные и приватные репозитории (через токен).
+-   **civitai://...** — модели из репозитория Civitai (через токен).
 
 Hugging Face источники (`hf://`):
 
@@ -122,7 +123,7 @@ Hugging Face источники (`hf://`):
     -   `hf://<org>/<repo>/<path/inside/repo>?rev=<rev>`
 
 -   Ревизия `<rev>` по умолчанию `main`.
--   Для приватных репозиториев укажите токен в окружении: `HUGGINGFACE_TOKEN` или `HF_TOKEN`.
+-   Для приватных репозиториев укажите токен в окружении: `HF_TOKEN`.
 -   Примеры:
 
     ```bash
@@ -133,7 +134,7 @@ Hugging Face источники (`hf://`):
     hf://runwayml/stable-diffusion-v1-5/v1-5-pruned.safetensors?rev=main
 
     # Приватный репозиторий (токен из окружения)
-    export HUGGINGFACE_TOKEN="hf_..."
+    export HF_TOKEN="hf_..."
     hf://myorg/private-model@v1.0/model.safetensors
     ```
 
@@ -146,6 +147,40 @@ Hugging Face источники (`hf://`):
             "name": "sd15",
             "source": "hf://runwayml/stable-diffusion-v1-5/v1-5-pruned.safetensors?rev=main",
             "target_path": "$MODELS_DIR/checkpoints/sd15.safetensors",
+            "checksum": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        }
+    ]
+}
+```
+
+Civitai источники (`civitai://`):
+
+-   Формат URL:
+
+    -   `civitai://models/<model_id>`
+    -   `civitai://api/download/models/<model_id>`
+
+-   Для доступа к моделям укажите токен в окружении: `CIVITAI_TOKEN`.
+-   Примеры:
+
+    ```bash
+    # Скачивание модели по ID
+    export CIVITAI_TOKEN="..."
+    civitai://models/12345
+
+    # Прямой URL скачивания
+    civitai://api/download/models/12345
+    ```
+
+Пример секции `models` в lock-файле с Civitai:
+
+```json
+{
+    "models": [
+        {
+            "name": "my-civitai-model",
+            "source": "civitai://models/12345",
+            "target_path": "$MODELS_DIR/models/my-model.safetensors",
             "checksum": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         }
     ]

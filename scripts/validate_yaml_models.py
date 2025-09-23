@@ -30,6 +30,7 @@ import tempfile
 import urllib.parse
 import urllib.request
 from typing import Dict, List, Optional, Tuple
+import stat
 
 
 # ----------------------------- Small utilities ----------------------------- #
@@ -117,6 +118,68 @@ def run_command(command: List[str]) -> Tuple[int, str, str]:
     proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     out, err = proc.communicate()
     return proc.returncode, out.strip(), err.strip()
+
+
+def get_model_size(source: str, timeout: int = 60) -> Optional[int]:
+    """Get model size in bytes from source URL or local path."""
+    try:
+        parsed = urllib.parse.urlparse(source)
+        if parsed.scheme in ("http", "https"):
+            # Try HEAD request first
+            req = urllib.request.Request(source, method="HEAD")
+            req.add_header("User-Agent", "runpod-comfy-yaml-verifier/1.0")
+            token = os.environ.get("HUGGINGFACE_TOKEN") or os.environ.get("HF_TOKEN")
+            if token:
+                req.add_header("Authorization", f"Bearer {token}")
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                content_length = resp.headers.get("Content-Length")
+                if content_length:
+                    return int(content_length)
+        elif parsed.scheme in ("hf", "huggingface"):
+            # Build resolve URL and get size
+            repo_id, revision, path_in_repo = parse_hf_source(source)
+            resolve_url = build_hf_resolve_url(repo_id, revision, path_in_repo)
+            return get_model_size(resolve_url, timeout)
+        elif parsed.scheme in ("file",):
+            path = urllib.request.url2pathname(parsed.path)
+            if os.path.exists(path):
+                return os.path.getsize(path)
+        elif parsed.scheme in ("gs", "gsutil") or source.startswith("gs://"):
+            # Use gsutil to get size
+            gsutil = shutil.which("gsutil")
+            if gsutil:
+                code, out, err = run_command([gsutil, "stat", source])
+                if code == 0:
+                    # Parse gsutil stat output for Content-Length
+                    for line in out.split('\n'):
+                        if line.startswith('Content-Length:'):
+                            return int(line.split(':', 1)[1].strip())
+        else:
+            # Treat as local filesystem path
+            if os.path.exists(source):
+                return os.path.getsize(source)
+    except Exception as exc:
+        log_warn(f"Failed to get size for {source}: {exc}")
+    return None
+
+
+def get_disk_free_space(path: str) -> int:
+    """Get free disk space in bytes for the given path."""
+    try:
+        statvfs = os.statvfs(path)
+        return statvfs.f_frsize * statvfs.f_bavail  # Free blocks available to non-superuser
+    except Exception as exc:
+        log_error(f"Failed to get disk free space for {path}: {exc}")
+        return 0
+
+
+def format_bytes(bytes_value: int) -> str:
+    """Format bytes to human readable format."""
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if bytes_value < 1024.0:
+            return f"{bytes_value:.1f} {unit}"
+        bytes_value /= 1024.0
+    return f"{bytes_value:.1f} TB"
 
 
 # ----------------------------- Cache management ----------------------------- #
@@ -442,7 +505,82 @@ def verify_single_model(yaml_file: str, model: Dict[str, object], env: Dict[str,
             pass
 
 
-def run_validation(yaml_files: List[str], models_dir: Optional[str], cache_dir: Optional[str], overwrite: bool, timeout: int, verbose: bool, validate_only: bool) -> int:
+def check_disk_space(yaml_files: List[str], models_dir: Optional[str], cache_dir: Optional[str], timeout: int, verbose: bool) -> bool:
+    """Check if there's enough disk space for all models to be downloaded."""
+    env = derive_env(models_dir=models_dir)
+
+    # Default cache dir
+    if cache_dir:
+        resolved_cache_dir = cache_dir
+    else:
+        comfy_home = env["COMFY_HOME"]
+        resolved_cache_dir = str(pathlib.Path(comfy_home) / ".cache" / "models")
+
+    # Collect all models that need to be downloaded
+    models_to_check = []
+    total_size = 0
+    unknown_sizes = []
+
+    for yaml_file in yaml_files:
+        try:
+            models = load_yaml_models(yaml_file)
+        except Exception:
+            continue
+
+        for model in models:
+            name = str(model.get("name", ""))
+            target_path_raw = str(model.get("target_path", ""))
+            if not target_path_raw:
+                continue
+
+            target_path = expand_env(target_path_raw, extra_env=env)
+            source = model.get("source")
+
+            # Skip if file already exists
+            if os.path.exists(target_path):
+                continue
+
+            # Skip if no source provided
+            if not source:
+                continue
+
+            models_to_check.append((name, source, target_path))
+            size = get_model_size(str(source), timeout=timeout)
+            if size is not None:
+                total_size += size
+            else:
+                unknown_sizes.append(name)
+
+    if not models_to_check:
+        log_info("Все модели уже присутствуют, проверка места на диске не требуется")
+        return True
+
+    # Check disk space for models directory and cache directory
+    models_disk_free = get_disk_free_space(env["MODELS_DIR"])
+    cache_disk_free = get_disk_free_space(resolved_cache_dir)
+
+    # Use the minimum free space
+    available_space = min(models_disk_free, cache_disk_free)
+
+    log_info("Проверка места на диске:")
+    log_info(f"  Моделей к загрузке: {len(models_to_check)}")
+    log_info(f"  Общий размер моделей: {format_bytes(total_size)}")
+    log_info(f"  Доступное место: {format_bytes(available_space)}")
+
+    if unknown_sizes:
+        log_warn(f"Размер неизвестен для моделей: {', '.join(unknown_sizes)}")
+
+    if total_size > available_space:
+        shortage = total_size - available_space
+        log_error(f"Недостаточно места на диске! Не хватает: {format_bytes(shortage)}")
+        return False
+    else:
+        remaining = available_space - total_size
+        log_info(f"Место достаточно. После установки останется: {format_bytes(remaining)}")
+        return True
+
+
+def run_validation(yaml_files: List[str], models_dir: Optional[str], cache_dir: Optional[str], overwrite: bool, timeout: int, verbose: bool, validate_only: bool, skip_disk_check: bool) -> int:
     env = derive_env(models_dir=models_dir)
 
     # Default cache dir
@@ -452,6 +590,13 @@ def run_validation(yaml_files: List[str], models_dir: Optional[str], cache_dir: 
         comfy_home = env["COMFY_HOME"]
         resolved_cache_dir = str(pathlib.Path(comfy_home) / ".cache" / "models")
     safe_makedirs(resolved_cache_dir)
+
+    # Check disk space analysis (always, unless explicitly skipped)
+    if not skip_disk_check:
+        disk_check_passed = check_disk_space(yaml_files, models_dir, cache_dir, timeout, verbose)
+        if not validate_only and not disk_check_passed:
+            log_error("Проверка места на диске не пройдена. Остановка выполнения.")
+            return 1
 
     all_results: List[VerifyResult] = []
 
@@ -523,6 +668,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--timeout", type=int, default=120, help="Network timeout in seconds for http(s)/gs downloads")
     p.add_argument("--verbose", action="store_true", help="Verbose output (per-model status)")
     p.add_argument("--validate-only", action="store_true", help="Only validate YAML structure, don't download models")
+    p.add_argument("--skip-disk-check", action="store_true", help="Skip disk space check before downloading models")
     return p
 
 
@@ -563,6 +709,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             timeout=args.timeout,
             verbose=args.verbose,
             validate_only=args.validate_only,
+            skip_disk_check=args.skip_disk_check,
         )
     except FileNotFoundError as exc:
         log_error(str(exc))

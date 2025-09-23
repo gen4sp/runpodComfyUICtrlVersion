@@ -221,10 +221,38 @@ def parse_hf_source(source: str) -> Tuple[str, str, str]:
     return repo_id, revision, path_in_repo
 
 
+def parse_civitai_source(source: str) -> str:
+    parsed = urllib.parse.urlparse(source)
+    if parsed.scheme not in ("civitai",):
+        raise ValueError("not a civitai url")
+    path = parsed.path.lstrip("/")
+    if not path:
+        raise ValueError("Invalid civitai url. Expected civitai://models/<id> or civitai://api/download/models/<id>")
+    return path
+
+
+def build_civitai_url(path: str) -> str:
+    if path.startswith("api/download/models/"):
+        return f"https://civitai.com/{path}"
+    elif path.startswith("models/"):
+        model_id = path.split("/")[-1]
+        return f"https://civitai.com/api/download/models/{model_id}"
+    else:
+        raise ValueError("Unsupported civitai path format")
+
+
+def download_civitai(source: str, dest_path: str, timeout: int = 60) -> None:
+    path = parse_civitai_source(source)
+    download_url = build_civitai_url(path)
+    token = os.environ.get("CIVITAI_TOKEN")
+    headers = {"Authorization": f"Bearer {token}"} if token else None
+    download_http(download_url, dest_path, timeout=timeout, headers=headers)
+
+
 def download_hf(source: str, dest_path: str, timeout: int = 60) -> None:
     repo_id, revision, path_in_repo = parse_hf_source(source)
     resolve_url = build_hf_resolve_url(repo_id, revision, path_in_repo)
-    token = os.environ.get("HUGGINGFACE_TOKEN") or os.environ.get("HF_TOKEN")
+    token = os.environ.get("HF_TOKEN")
     headers = {"Authorization": f"Bearer {token}"} if token else None
     download_http(resolve_url, dest_path, timeout=timeout, headers=headers)
 
@@ -243,6 +271,8 @@ def fetch_to_temp(source: str, tmp_dir: str, timeout: int = 60) -> str:
             download_gs(source, tmp_path)
         elif parsed.scheme in ("hf", "huggingface"):
             download_hf(source, tmp_path, timeout=timeout)
+        elif parsed.scheme in ("civitai",):
+            download_civitai(source, tmp_path, timeout=timeout)
         else:
             # Treat as local filesystem path
             download_file(source, tmp_path)
