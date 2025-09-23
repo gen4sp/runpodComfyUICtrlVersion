@@ -319,7 +319,7 @@ python3 scripts/repro_workflow_hash.py \
 
     ```bash
     echo '{}' > /app/workflows/minimal.json
-    python -m docker.handler.main \
+    python -m rp_handler.main \
       --lock "/app/lockfiles/comfy-${COMFY_VERSION_NAME}.lock.json" \
       --workflow /app/workflows/minimal.json \
       --output base64 | head -c 80; echo
@@ -328,7 +328,7 @@ python3 scripts/repro_workflow_hash.py \
     Для GCS:
 
     ```bash
-    python -m docker.handler.main \
+    python -m rp_handler.main \
       --lock "/app/lockfiles/comfy-${COMFY_VERSION_NAME}.lock.json" \
       --workflow /app/workflows/minimal.json \
       --output gcs | cat

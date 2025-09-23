@@ -53,7 +53,7 @@
 1. Создайте простой workflow JSON:
     - `echo '{"graph": {}}' > workflow.json`
 2. Запустите handler (используется «заглушка» выполнения):
-    - `python -m docker.handler.main --lock lockfiles/comfy-local.lock.json --workflow workflow.json --output base64 --verbose`
+    - `python -m rp_handler.main --lock lockfiles/comfy-local.lock.json --workflow workflow.json --output base64 --verbose`
     - Ожидаемое: в stdout печатается base64-строка. Декодируема в байты содержимого `workflow.json`.
 
 ### 5) Сравнение артефакта с базовой метрикой
@@ -72,7 +72,7 @@
     - `export GCS_BUCKET=<bucket_name>`
     - (опционально) `export GCS_PREFIX=comfy/outputs` `export GCS_PUBLIC=1` `export GCS_SIGNED_URL_TTL=60`
 2. Запуск:
-    - `python -m docker.handler.main --lock lockfiles/comfy-local.lock.json --workflow workflow.json --output gcs --gcs-bucket "$GCS_BUCKET" --gcs-prefix "$GCS_PREFIX" --verbose`
+    - `python -m rp_handler.main --lock lockfiles/comfy-local.lock.json --workflow workflow.json --output gcs --gcs-bucket "$GCS_BUCKET" --gcs-prefix "$GCS_PREFIX" --verbose`
     - Ожидаемое: в stdout печатается `gs://…` ссылка. В логах может отображаться signed URL (если включено).
 
 ### 7) Быстрый прогон автотестов

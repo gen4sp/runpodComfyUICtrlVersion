@@ -59,7 +59,7 @@ mkdir -p /runpod-volume/comfy/models
 
 ```bash
 echo '{}' > /app/workflows/minimal.json
-python -m docker.handler.main \
+python -m rp_handler.main \
   --lock "/app/lockfiles/comfy-${COMFY_VERSION_NAME}.lock.json" \
   --workflow /app/workflows/minimal.json \
   --output base64 | head -c 80; echo
@@ -70,7 +70,7 @@ python -m docker.handler.main \
 
 ### Serverless
 
--   Базовый образ и handler рассчитаны на **CLI-вызов** (`python -m docker.handler.main ...`).
+-   Базовый образ и handler рассчитаны на **CLI-вызов** (`python -m rp_handler.main ...`).
 -   Для Serverless рекомендуется тонкий адаптер, который маппит входной JSON RunPod job → аргументы CLI.
     На данном этапе можно:
     -   Задать команду запуска контейнера с нужными аргументами (`CMD`/`Args`) либо

@@ -33,7 +33,7 @@ def log_error(msg: str) -> None:
 
 def run_handler(lock: str, workflow: str, output_mode: str = "base64") -> Tuple[int, str, str]:
     root = pathlib.Path(__file__).resolve().parent.parent
-    cmd = [sys.executable, "-m", "docker.handler.main", "--lock", lock, "--workflow", workflow, "--output", output_mode]
+    cmd = [sys.executable, "-m", "rp_handler.main", "--lock", lock, "--workflow", workflow, "--output", output_mode]
     proc = subprocess.Popen(cmd, cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     out, err = proc.communicate()
     return proc.returncode, out.strip(), err.strip()
