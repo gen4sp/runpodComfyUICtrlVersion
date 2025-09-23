@@ -20,17 +20,16 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import hashlib
-import json
 import os
 import pathlib
 import shutil
 import subprocess
-import sys
 import tempfile
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple
-import stat
+import time
 
 
 # ----------------------------- Small utilities ----------------------------- #
@@ -266,11 +265,31 @@ def get_runpod_quota_bytes() -> Optional[int]:
     if gb_val is not None and gb_val > 0:
         return int(gb_val * 1024 * 1024 * 1024)
 
+    # Default 150 GiB if running under a known RunPod-like mount and no envs set
+    try:
+        root = os.environ.get("RUNPOD_VOLUME_ROOT") or ("/runpod-volume" if os.path.exists("/runpod-volume") else ("/workspace" if os.path.exists("/workspace") else None))
+        if root:
+            default_gb = _parse_int_env([
+                "RUNPOD_VOLUME_DEFAULT_QUOTA_GB",
+                "RUNPOD_DEFAULT_QUOTA_GB",
+            ])
+            if default_gb is None:
+                default_gb = 150
+            return int(default_gb * 1024 * 1024 * 1024)
+    except Exception:
+        pass
     return None
 
 
 def get_runpod_mount_root() -> str:
-    return os.environ.get("RUNPOD_VOLUME_ROOT", "/runpod-volume")
+    env_root = os.environ.get("RUNPOD_VOLUME_ROOT")
+    if env_root:
+        return env_root
+    if os.path.exists("/runpod-volume"):
+        return "/runpod-volume"
+    if os.path.exists("/workspace"):
+        return "/workspace"
+    return "/"
 
 
 def is_under_path(path: str, root: str) -> bool:
@@ -385,15 +404,40 @@ def store_in_cache(cache_path: str, src_path: str) -> None:
 # ------------------------------- Downloaders -------------------------------- #
 
 
-def download_http(url: str, dest_path: str, timeout: int = 60, headers: Optional[Dict[str, str]] = None) -> None:
+def download_http(url: str, dest_path: str, timeout: int = 60, headers: Optional[Dict[str, str]] = None, show_progress: bool = True) -> None:
     req_headers = {"User-Agent": "runpod-comfy-yaml-verifier/1.0"}
     if headers:
         req_headers.update(headers)
     req = urllib.request.Request(url, headers=req_headers)
     with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec - user-controlled URLs expected
+        total = resp.length if getattr(resp, "length", None) is not None else None
+        if total is None:
+            # Try header
+            total_hdr = resp.headers.get("Content-Length")
+            total = int(total_hdr) if total_hdr else None
         safe_makedirs(str(pathlib.Path(dest_path).parent))
+        chunk = 1024 * 1024
+        downloaded = 0
+        last_print = 0.0
+        start_ts = time.time()
         with open(dest_path, "wb") as f:
-            shutil.copyfileobj(resp, f, length=1024 * 1024)
+            while True:
+                buf = resp.read(chunk)
+                if not buf:
+                    break
+                f.write(buf)
+                downloaded += len(buf)
+                now = time.time()
+                if show_progress and (now - last_print) >= 0.5:
+                    last_print = now
+                    if total and total > 0:
+                        pct = downloaded / total
+                        elapsed = now - start_ts
+                        speed = downloaded / max(elapsed, 1e-6)
+                        remaining = (total - downloaded) / max(speed, 1e-6)
+                        log_info(f"  ↓ {format_bytes(downloaded)} / {format_bytes(total)} ({pct*100:.1f}%), {format_bytes(int(speed))}/s, ETA {int(remaining)}s")
+                    else:
+                        log_info(f"  ↓ {format_bytes(downloaded)} / ?")
 
 
 def download_file(src_path: str, dest_path: str) -> None:
@@ -647,8 +691,31 @@ def verify_single_model(yaml_file: str, model: Dict[str, object], env: Dict[str,
             except Exception as exc:
                 log_warn(f"failed to restore from cache for {name}: {exc}")
 
-    # Fetch from source to temp
-    tmp_dir = tempfile.mkdtemp(prefix="validate_yaml_")
+    # Preflight: ensure enough space for this model (if size known)
+    pre_size: Optional[int] = None
+    try:
+        pre_size = get_model_size(str(source), timeout=min(timeout, 60)) if isinstance(source, str) else None
+    except Exception:
+        pre_size = None
+    if pre_size and pre_size > 0:
+        target_dir = str(pathlib.Path(target_path).parent)
+        free_target = get_effective_free_space(target_dir)
+        free_cache = get_effective_free_space(cache_dir)
+        required = pre_size
+        available = min(free_target, free_cache)
+        if required > available:
+            try:
+                _log_enospc_context(name=name, source=source, target_path=target_path, cache_dir=cache_dir, tmp_path=None)
+            except Exception:
+                pass
+            shortage = required - available
+            return VerifyResult(yaml_file=yaml_file, name=name, target_path=target_path, status="error", message=f"not enough space (short by {format_bytes(shortage)})")
+
+    # Remember previous existence to report status accurately
+    previously_exists = os.path.exists(target_path)
+
+    # Fetch from source to temp in cache directory (same mount, avoid /tmp)
+    tmp_dir = tempfile.mkdtemp(prefix="validate_yaml_", dir=cache_dir)
     try:
         try:
             tmp_download = fetch_to_temp(source, tmp_dir=tmp_dir, timeout=timeout)
@@ -699,7 +766,7 @@ def verify_single_model(yaml_file: str, model: Dict[str, object], env: Dict[str,
                     pass
                 return VerifyResult(yaml_file=yaml_file, name=name, target_path=target_path, status="error", message="no space left on device (final copy)")
             raise
-        return VerifyResult(yaml_file=yaml_file, name=name, target_path=target_path, status=("updated" if os.path.exists(target_path) else "downloaded"), message="fetched from source")
+        return VerifyResult(yaml_file=yaml_file, name=name, target_path=target_path, status=("updated" if previously_exists else "downloaded"), message="fetched from source")
     finally:
         try:
             shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -794,7 +861,7 @@ def check_disk_space(yaml_files: List[str], models_dir: Optional[str], cache_dir
         return True
 
 
-def run_validation(yaml_files: List[str], models_dir: Optional[str], cache_dir: Optional[str], overwrite: bool, timeout: int, verbose: bool, validate_only: bool, skip_disk_check: bool) -> int:
+def run_validation(yaml_files: List[str], models_dir: Optional[str], cache_dir: Optional[str], overwrite: bool, timeout: int, verbose: bool, validate_only: bool, skip_disk_check: bool, workers: int) -> int:
     env = derive_env(models_dir=models_dir)
 
     # Default cache dir
@@ -814,8 +881,9 @@ def run_validation(yaml_files: List[str], models_dir: Optional[str], cache_dir: 
 
     all_results: List[VerifyResult] = []
 
+    # Validate YAMLs and collect models
+    models_to_process: List[Tuple[str, Dict[str, object]]] = []
     for yaml_file in yaml_files:
-        # First validate YAML structure
         validation_errors = validate_yaml_structure(yaml_file)
         if validation_errors:
             for error in validation_errors:
@@ -823,35 +891,55 @@ def run_validation(yaml_files: List[str], models_dir: Optional[str], cache_dir: 
             if validate_only:
                 all_results.append(VerifyResult(yaml_file=yaml_file, name="", target_path="", status="error", message="validation failed"))
                 continue
-            else:
-                # Continue with processing despite errors
-                pass
-
         try:
             models = load_yaml_models(yaml_file)
         except Exception as exc:
             log_error(f"Failed to load models from {yaml_file}: {exc}")
             all_results.append(VerifyResult(yaml_file=yaml_file, name="", target_path="", status="error", message=str(exc)))
             continue
-
         if not models:
             log_warn(f"No models found in {yaml_file}")
             continue
-
         for m in models:
+            models_to_process.append((yaml_file, m))
+
+    if validate_only:
+        # Only structure validation
+        total = len(yaml_files)
+        errors = sum(1 for r in all_results if r.status == "error")
+        log_info(f"Validation summary: total={total}, errors={errors}")
+        return 0 if errors == 0 else 1
+
+    # Parallel verification/download
+    workers = max(1, int(workers))
+    if workers == 1:
+        for yaml_file, m in models_to_process:
             try:
-                if validate_only:
-                    # Just validate structure, don't download
-                    continue
-                else:
-                    res = verify_single_model(yaml_file, m, env=env, cache_dir=resolved_cache_dir, overwrite=overwrite, timeout=timeout)
-                    all_results.append(res)
-                    if verbose:
-                        log_info(f"{yaml_file} - {res.name}: {res.status} - {res.message}")
+                res = verify_single_model(yaml_file, m, env=env, cache_dir=resolved_cache_dir, overwrite=overwrite, timeout=timeout)
+                all_results.append(res)
+                if verbose:
+                    log_info(f"{yaml_file} - {res.name}: {res.status} - {res.message}")
             except Exception as exc:
                 target = str(m.get("target_path")) if isinstance(m.get("target_path"), str) else ""
                 all_results.append(VerifyResult(yaml_file=yaml_file, name=str(m.get("name")), target_path=target, status="error", message=str(exc)))
                 log_error(f"{yaml_file} - {m.get('name')}: error - {exc}")
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            future_to_meta = {}
+            for yaml_file, m in models_to_process:
+                future = executor.submit(verify_single_model, yaml_file, m, env, resolved_cache_dir, overwrite, timeout)
+                future_to_meta[future] = (yaml_file, m)
+            for future in as_completed(future_to_meta):
+                yaml_file, m = future_to_meta[future]
+                try:
+                    res = future.result()
+                    all_results.append(res)
+                    if verbose:
+                        log_info(f"{yaml_file} - {res.name}: {res.status} - {res.message}")
+                except Exception as exc:
+                    target = str(m.get("target_path")) if isinstance(m.get("target_path"), str) else ""
+                    all_results.append(VerifyResult(yaml_file=yaml_file, name=str(m.get("name")), target_path=target, status="error", message=str(exc)))
+                    log_error(f"{yaml_file} - {m.get('name')}: error - {exc}")
 
     if validate_only:
         # Only structure validation
@@ -883,6 +971,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--verbose", action="store_true", help="Verbose output (per-model status)")
     p.add_argument("--validate-only", action="store_true", help="Only validate YAML structure, don't download models")
     p.add_argument("--skip-disk-check", action="store_true", help="Skip disk space check before downloading models")
+    p.add_argument("--workers", type=int, default=4, help="Number of parallel download workers (default: 4). Use 1 for sequential")
     return p
 
 
@@ -924,6 +1013,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             verbose=args.verbose,
             validate_only=args.validate_only,
             skip_disk_check=args.skip_disk_check,
+            workers=args.workers,
         )
     except FileNotFoundError as exc:
         log_error(str(exc))
