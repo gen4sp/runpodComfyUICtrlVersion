@@ -36,5 +36,5 @@ models:
       source: "hf://Kijai/WanVideo_comfy/Lightx2v/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank128_bf16.safetensors"
       target_path: "$MODELS_DIR/loras/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank128_bf16.safetensors"
     - name: "wan-lora-model-1996092"
-      source: "https://civitai.com/api/download/models/1996092?type=Model&format=SafeTensor"
+      source: "civitai://api/download/models/1996092?type=Model&format=SafeTensor"
       target_path: "$MODELS_DIR/loras/wan_lora_model_1996092.safetensors"
