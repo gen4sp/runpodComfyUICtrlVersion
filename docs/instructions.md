@@ -392,9 +392,9 @@ python3 scripts/repro_workflow_hash.py \
 -   Smoke-тест в контейнере:
 
     ```bash
-    echo '{}' > /app/workflows/minimal.json
+    echo '{}' > workflows/minimal.json
     python -m rp_handler.main \
-      --lock "/app/lockfiles/comfy-${COMFY_VERSION_NAME}.lock.json" \
+      --lock "lockfiles/comfy-${COMFY_VERSION_NAME}.lock.json" \
       --workflow /app/workflows/minimal.json \
       --output base64 | head -c 80; echo
     ```

@@ -80,8 +80,11 @@ def install_python_packages(lock: Dict[str, object], verbose: bool) -> None:
     if not isinstance(packages, list) or not packages:
         log_warn("Empty python.packages; skipping")
         return
+    # Выбор интерпретера Python: lock.python.interpreter -> $COMFY_HOME/.venv -> системный
+    python_interpreter: str = _resolve_python_interpreter(lock, verbose=verbose)
+
     # Compose pip install args from lock
-    args: List[str] = [_select_python_executable(), "-m", "pip", "install"]
+    args: List[str] = [python_interpreter, "-m", "pip", "install"]
     for item in packages:
         if not isinstance(item, dict):
             continue
@@ -110,7 +113,8 @@ def verify_and_fetch_models(lock_path: Optional[str], env: Dict[str, str], verbo
     if not script_path.exists():
         log_warn("verify_models.py not found in image; skipping model verification")
         return
-    python_exe = _select_python_executable()
+    # Если есть venv в $COMFY_HOME, используем его интерпретер для запуска скрипта
+    python_exe = _venv_python_from_env() or _select_python_executable()
     args = [python_exe, str(script_path), "--lock", str(lock_path), "--models-dir", env["MODELS_DIR"], "--verbose"]
     if no_cache:
         args.append("--no-cache")
@@ -123,6 +127,9 @@ def verify_and_fetch_models(lock_path: Optional[str], env: Dict[str, str], verbo
 
 def apply_lock_and_prepare(lock_path: Optional[str], models_dir: Optional[str], verbose: bool) -> None:
     env = derive_env(models_dir=models_dir)
+    # Экспортируем вычисленные значения в окружение процесса, чтобы их видели дочерние вызовы
+    os.environ["COMFY_HOME"] = env["COMFY_HOME"]
+    os.environ["MODELS_DIR"] = env["MODELS_DIR"]
     lock = load_lock(lock_path)
     # 1) Установить python пакеты согласно lock
     install_python_packages(lock, verbose=verbose)
@@ -134,6 +141,77 @@ def apply_lock_and_prepare(lock_path: Optional[str], models_dir: Optional[str], 
             or (os.environ.get("COMFY_CACHE", "").lower() in ("1", "true", "yes"))
         )
         verify_and_fetch_models(lock_path=lock_path, env=env, verbose=verbose, no_cache=(not use_cache))
+
+
+# ---------------------------- helpers: interpreter ---------------------------- #
+
+def _venv_python_path(venv_dir: pathlib.Path) -> pathlib.Path:
+    """Возвращает путь к python внутри venv для текущей платформы."""
+    if os.name == "nt":
+        return venv_dir / "Scripts" / "python.exe"
+    return venv_dir / "bin" / "python"
+
+
+def _venv_python_from_env() -> Optional[str]:
+    """Если задан COMFY_HOME и существует venv, вернуть путь к его python."""
+    comfy_home = os.environ.get("COMFY_HOME")
+    if not comfy_home:
+        return None
+    venv_dir = pathlib.Path(comfy_home) / ".venv"
+    py = _venv_python_path(venv_dir)
+    if py.exists() and os.access(str(py), os.X_OK):
+        return str(py)
+    return None
+
+
+def _resolve_python_interpreter(lock: Dict[str, object], verbose: bool = False) -> str:
+    """Выбрать интерпретер Python для установки пакетов:
+    1) python.interpreter из lock, если существует
+    2) $COMFY_HOME/.venv/bin/python, если существует; если нет — попытаться создать venv
+    3) системный python
+    """
+    # 1) Из lock
+    if isinstance(lock, dict):
+        python = lock.get("python")
+        if isinstance(python, dict):
+            interp = python.get("interpreter")
+            if isinstance(interp, str) and interp:
+                p = pathlib.Path(interp)
+                if p.exists() and os.access(str(p), os.X_OK):
+                    if verbose:
+                        log_info(f"Using Python interpreter from lock: {interp}")
+                    return str(p)
+
+    # 2) Из $COMFY_HOME/.venv
+    comfy_home = os.environ.get("COMFY_HOME")
+    if comfy_home:
+        venv_dir = pathlib.Path(comfy_home) / ".venv"
+        venv_python = _venv_python_path(venv_dir)
+        if venv_python.exists() and os.access(str(venv_python), os.X_OK):
+            if verbose:
+                log_info(f"Using Python interpreter from venv: {venv_python}")
+            return str(venv_python)
+        # Попробуем создать venv, если директории нет или нет python внутри
+        try:
+            base_py = _select_python_executable()
+            if verbose:
+                log_info(f"Creating venv at {venv_dir} using {base_py}")
+            venv_dir.parent.mkdir(parents=True, exist_ok=True)
+            code, out, err = run([base_py, "-m", "venv", str(venv_dir)])
+            if code == 0 and venv_python.exists():
+                if verbose:
+                    log_info(f"Venv created: {venv_python}")
+                return str(venv_python)
+            else:
+                log_warn(f"Failed to create venv at {venv_dir}: {err or out}")
+        except Exception as e:
+            log_warn(f"Exception while creating venv at {venv_dir}: {e}")
+
+    # 3) Системный python
+    sys_py = _select_python_executable()
+    if verbose:
+        log_info(f"Using system Python interpreter: {sys_py}")
+    return sys_py
 
 
 
