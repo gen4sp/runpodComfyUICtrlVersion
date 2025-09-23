@@ -75,7 +75,7 @@ def emit_output(data: bytes, mode: str, out_file: Optional[str], gcs_bucket: Opt
 
     if mode == "gcs":
         try:
-            from google.cloud import storage  # type: ignore
+            storage = __import__("google.cloud.storage", fromlist=["Client"])  # type: ignore
         except Exception as exc:
             raise RuntimeError("google-cloud-storage is required for GCS output") from exc
 
@@ -104,6 +104,12 @@ def emit_output(data: bytes, mode: str, out_file: Optional[str], gcs_bucket: Opt
         base_sleep = float(os.environ.get("GCS_RETRY_BASE_SLEEP", "0.5"))
         _gcs_upload_with_retries(blob, data=data, max_attempts=max_attempts, base_sleep=base_sleep, verbose=verbose)
 
+        url = f"gs://{gcs_bucket}/{object_name}"
+        # Сначала печатаем URL, чтобы первая строка stdout начиналась с gs://
+        print(url)
+        if verbose:
+            log_info(f"uploaded to {url}")
+        
         # Optionally make object public
         if _get_env_bool("GCS_PUBLIC", False):
             try:
@@ -124,13 +130,9 @@ def emit_output(data: bytes, mode: str, out_file: Optional[str], gcs_bucket: Opt
             except Exception as exc:
                 if verbose:
                     log_warn(f"Failed to generate signed URL: {exc}")
-
-        url = f"gs://{gcs_bucket}/{object_name}"
-        print(url)
-        if verbose:
-            log_info(f"uploaded to {url}")
         return
 
     raise ValueError(f"Unknown output mode: {mode}")
+
 
 

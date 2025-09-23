@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from docker.handler.output import emit_output
+from rp_handler.output import emit_output
 
 
 def test_emit_output_base64_to_stdout(capsys):
@@ -44,11 +44,13 @@ def test_emit_output_gcs_missing_dep(monkeypatch):
 def test_emit_output_gcs_requires_bucket(monkeypatch):
     # Provide a dummy google.cloud.storage module to pass the import
     dummy_mod = types.SimpleNamespace(Client=lambda project=None: None)
+    import builtins
+    real_import = builtins.__import__
 
     def fake_import(name, *args, **kwargs):  # type: ignore[no-untyped-def]
         if name == "google.cloud.storage":
             return dummy_mod
-        return __import__(name, *args, **kwargs)
+        return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr("builtins.__import__", fake_import)
 
@@ -86,11 +88,14 @@ def test_emit_output_gcs_requires_credentials(monkeypatch, tmp_path: Path):
         def bucket(self, bucket_name):  # type: ignore[no-untyped-def]
             return DummyBucket()
 
+    import builtins
+    real_import = builtins.__import__
+
     def fake_import(name, *args, **kwargs):  # type: ignore[no-untyped-def]
         if name == "google.cloud.storage":
             mod = types.SimpleNamespace(Client=DummyClient)
             return mod
-        return __import__(name, *args, **kwargs)
+        return real_import(name, *args, **kwargs)
 
     monkeypatch.setenv("GCS_VALIDATE", "0")
     monkeypatch.setattr("builtins.__import__", fake_import)
@@ -155,10 +160,13 @@ def test_emit_output_gcs_happy_path(monkeypatch, tmp_path: Path, capsys):
         def bucket(self, bucket_name):  # type: ignore[no-untyped-def]
             return DummyBucket(bucket_name)
 
+    import builtins
+    real_import = builtins.__import__
+
     def fake_import(name, *args, **kwargs):  # type: ignore[no-untyped-def]
         if name == "google.cloud.storage":
             return types.SimpleNamespace(Client=DummyClient)
-        return __import__(name, *args, **kwargs)
+        return real_import(name, *args, **kwargs)
 
     monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(creds))
     monkeypatch.setenv("GCS_PUBLIC", "1")

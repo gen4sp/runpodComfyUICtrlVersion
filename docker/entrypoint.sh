@@ -33,4 +33,4 @@ if [ ! -f "$LOCK_PATH" ]; then
   log_warn "Запуск без lock-файла. Доступны команды handler для справки."
 fi
 
-exec python -m docker.handler.main "$@"
+exec python -m rp_handler.main "$@"

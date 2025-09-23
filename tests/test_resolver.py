@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from docker.handler import resolver
+from rp_handler import resolver
 
 
 def test_expand_env_basic(monkeypatch):
@@ -60,15 +60,9 @@ def test_install_python_packages_builds_pip_args(monkeypatch, tmp_path: Path, ca
 
 
 def test_verify_and_fetch_models_invokes_script_if_present(monkeypatch, tmp_path: Path):
-    # Create dummy verify_models.py in /app/scripts via temp dir mapping
-    scripts_dir = tmp_path / "scripts"
-    scripts_dir.mkdir(parents=True)
-    vm = scripts_dir / "verify_models.py"
-    vm.write_text("print('VM called')\n", encoding="utf-8")
-
-    # Monkeypatch the expected path
-    monkeypatch.setattr(resolver.pathlib, "Path", lambda p=None: Path(p) if p else Path)
-    # Instead of patching Path, patch existence check for our specific path
+    # Вместо глобального патча pathlib.Path подменяем только exists для конкретного пути,
+    # чтобы не ломать pytest и сторонний код
+    vm = Path("/app/scripts/verify_models.py")
     def fake_exists(self):  # type: ignore[no-untyped-def]
         return str(self) == str(vm)
 

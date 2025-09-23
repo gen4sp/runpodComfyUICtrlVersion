@@ -2,7 +2,7 @@ import base64
 import json
 from pathlib import Path
 
-from docker.handler import main as handler_main
+from rp_handler import main as handler_main
 
 
 def test_main_base64_to_stdout(tmp_path, capsys, monkeypatch):

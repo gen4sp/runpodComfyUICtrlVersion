@@ -39,7 +39,7 @@ if [ -z "$WORKFLOW" ]; then echo "--workflow required" >&2; exit 1; fi
 cd "$ROOT_DIR"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
-"$PYTHON_BIN" -m docker.handler.main \
+"$PYTHON_BIN" -m rp_handler.main \
   --lock "$LOCK" \
   --workflow "$WORKFLOW" \
   ${OUTPUT:+--output "$OUTPUT"} \

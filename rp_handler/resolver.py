@@ -7,6 +7,7 @@ import pathlib
 import subprocess
 import sys
 from typing import Dict, List, Optional, Tuple
+import shutil
 
 
 def log_info(msg: str) -> None:
@@ -61,6 +62,15 @@ def load_lock(path: Optional[str]) -> Dict[str, object]:
     return data
 
 
+def _select_python_executable() -> str:
+    # Предпочитаем "python3", затем "python", затем sys.executable
+    for cand in ("python3", "python"):
+        found = shutil.which(cand)
+        if found:
+            return found
+    return sys.executable
+
+
 def install_python_packages(lock: Dict[str, object], verbose: bool) -> None:
     python = lock.get("python") if isinstance(lock, dict) else None
     if not isinstance(python, dict):
@@ -71,7 +81,7 @@ def install_python_packages(lock: Dict[str, object], verbose: bool) -> None:
         log_warn("Empty python.packages; skipping")
         return
     # Compose pip install args from lock
-    args: List[str] = [sys.executable, "-m", "pip", "install"]
+    args: List[str] = [_select_python_executable(), "-m", "pip", "install"]
     for item in packages:
         if not isinstance(item, dict):
             continue
@@ -100,7 +110,8 @@ def verify_and_fetch_models(lock_path: Optional[str], env: Dict[str, str], verbo
     if not script_path.exists():
         log_warn("verify_models.py not found in image; skipping model verification")
         return
-    args = [sys.executable, str(script_path), "--lock", str(lock_path), "--models-dir", env["MODELS_DIR"], "--verbose"]
+    python_exe = _select_python_executable()
+    args = [python_exe, str(script_path), "--lock", str(lock_path), "--models-dir", env["MODELS_DIR"], "--verbose"]
     code, out, err = run(args)
     if code != 0:
         log_warn(f"verify_models failed ({code}): {err}")
@@ -116,5 +127,6 @@ def apply_lock_and_prepare(lock_path: Optional[str], models_dir: Optional[str], 
     # 2) Проверить/восстановить модели
     if lock_path:
         verify_and_fetch_models(lock_path=lock_path, env=env, verbose=verbose)
+
 
 

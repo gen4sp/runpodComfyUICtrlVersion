@@ -29,7 +29,7 @@ RUN apt-get update -y && \
 
 # Копируем скрипты и handler внутрь образа
 COPY scripts/ /app/scripts/
-COPY docker/handler/ /app/docker/handler/
+COPY rp_handler/ /app/rp_handler/
 COPY lockfiles/ /app/lockfiles/
 
 # Создаём директории для COMFY_HOME и моделей
