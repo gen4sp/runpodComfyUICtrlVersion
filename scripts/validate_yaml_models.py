@@ -9,7 +9,7 @@ Reads YAML model specifications from models/ directory and:
 - Supports caching and environment variable expansion
 
 Usage:
-  python3 scripts/validate_yaml_models.py --models-dir "$COMFY_HOME/models" --cache-dir "$COMFY_HOME/.cache/models"
+  python3 scripts/validate_yaml_models.py --models-dir "$COMFY_HOME/models" --cache-dir "$COMFY_HOME/.cache/models" [--cache]
 
 Or for specific YAML file:
   python3 scripts/validate_yaml_models.py --yaml models/flux-models.yml --models-dir "$COMFY_HOME/models"
@@ -662,7 +662,7 @@ def derive_env(models_dir: Optional[str]) -> Dict[str, str]:
     return env
 
 
-def verify_single_model(yaml_file: str, model: Dict[str, object], env: Dict[str, str], cache_dir: str, overwrite: bool, timeout: int) -> VerifyResult:
+def verify_single_model(yaml_file: str, model: Dict[str, object], env: Dict[str, str], cache_dir: str, overwrite: bool, timeout: int, no_cache: bool) -> VerifyResult:
     name = str(model.get("name"))
     target_path_raw = str(model.get("target_path"))
     if not target_path_raw:
@@ -678,13 +678,14 @@ def verify_single_model(yaml_file: str, model: Dict[str, object], env: Dict[str,
         if expected_algo and expected_hex:
             actual = compute_checksum(target_path, algo=expected_algo)
             if actual.split(":", 1)[1] == expected_hex:
-                # Populate cache if missing
-                cache_entry_dir, cache_entry_path = cache_key_path(cache_dir, expected_checksum, pathlib.Path(target_path).name)
-                if not os.path.exists(cache_entry_path):
-                    try:
-                        store_in_cache(cache_entry_path, target_path)
-                    except Exception as exc:
-                        log_warn(f"cache store failed for {name}: {exc}")
+                # Populate cache if missing (unless disabled)
+                if not no_cache and cache_dir:
+                    cache_entry_dir, cache_entry_path = cache_key_path(cache_dir, expected_checksum, pathlib.Path(target_path).name)
+                    if not os.path.exists(cache_entry_path):
+                        try:
+                            store_in_cache(cache_entry_path, target_path)
+                        except Exception as exc:
+                            log_warn(f"cache store failed for {name}: {exc}")
                 return VerifyResult(yaml_file=yaml_file, name=name, target_path=target_path, status="ok", message="present")
             else:
                 if not source:
@@ -695,21 +696,22 @@ def verify_single_model(yaml_file: str, model: Dict[str, object], env: Dict[str,
         else:
             # No expected checksum: consider present
             # Also add to cache keyed by derived sha256
-            try:
-                actual_sha = compute_checksum(target_path, algo="sha256")
-                _, cache_entry_path = cache_key_path(cache_dir, actual_sha, pathlib.Path(target_path).name)
-                if not os.path.exists(cache_entry_path):
-                    store_in_cache(cache_entry_path, target_path)
-            except Exception:
-                pass
+            if not no_cache and cache_dir:
+                try:
+                    actual_sha = compute_checksum(target_path, algo="sha256")
+                    _, cache_entry_path = cache_key_path(cache_dir, actual_sha, pathlib.Path(target_path).name)
+                    if not os.path.exists(cache_entry_path):
+                        store_in_cache(cache_entry_path, target_path)
+                except Exception:
+                    pass
             return VerifyResult(yaml_file=yaml_file, name=name, target_path=target_path, status="ok", message="present (no checksum)")
 
     # At this point: file missing OR mismatch with overwrite allowed
     if not source:
         return VerifyResult(yaml_file=yaml_file, name=name, target_path=target_path, status="error", message="missing and no source provided")
 
-    # Try cache when checksum known
-    if expected_checksum:
+    # Try cache when checksum known (unless disabled)
+    if not no_cache and expected_checksum and cache_dir:
         cache_entry_dir, cache_entry_path = cache_key_path(cache_dir, expected_checksum, pathlib.Path(target_path).name)
         if os.path.exists(cache_entry_path):
             try:
@@ -727,9 +729,12 @@ def verify_single_model(yaml_file: str, model: Dict[str, object], env: Dict[str,
     if pre_size and pre_size > 0:
         target_dir = str(pathlib.Path(target_path).parent)
         free_target = get_effective_free_space(target_dir)
-        free_cache = get_effective_free_space(cache_dir)
+        if not no_cache and cache_dir:
+            free_cache = get_effective_free_space(cache_dir)
+            available = min(free_target, free_cache)
+        else:
+            available = free_target
         required = pre_size
-        available = min(free_target, free_cache)
         if required > available:
             try:
                 _log_enospc_context(name=name, source=source, target_path=target_path, cache_dir=cache_dir, tmp_path=None)
@@ -741,8 +746,12 @@ def verify_single_model(yaml_file: str, model: Dict[str, object], env: Dict[str,
     # Remember previous existence to report status accurately
     previously_exists = os.path.exists(target_path)
 
-    # Fetch from source to temp in cache directory (same mount, avoid /tmp)
-    tmp_dir = tempfile.mkdtemp(prefix="validate_yaml_", dir=cache_dir)
+    # Fetch from source to temp
+    if not no_cache and cache_dir:
+        tmp_parent = cache_dir
+    else:
+        tmp_parent = str(pathlib.Path(target_path).parent)
+    tmp_dir = tempfile.mkdtemp(prefix="validate_yaml_", dir=tmp_parent)
     try:
         try:
             tmp_download = fetch_to_temp(source, tmp_dir=tmp_dir, timeout=timeout)
@@ -769,22 +778,28 @@ def verify_single_model(yaml_file: str, model: Dict[str, object], env: Dict[str,
             if derived_sha:
                 expected_checksum = derived_sha
 
-        # Store to cache and copy to target
-        _, cache_entry_path = cache_key_path(cache_dir, expected_checksum, pathlib.Path(target_path).name)
-        try:
-            store_in_cache(cache_entry_path, tmp_download)
-        except OSError as exc:
-            if getattr(exc, "errno", None) == 28:
-                try:
-                    _log_enospc_context(name=name, source=source, target_path=target_path, cache_dir=cache_dir, tmp_path=tmp_download)
-                except Exception:
-                    pass
-                return VerifyResult(yaml_file=yaml_file, name=name, target_path=target_path, status="error", message="no space left on device (caching)")
-            else:
-                log_warn(f"cache store failed for {name}: {exc}")
+        # Store to cache (if enabled) and copy to target
+        if not no_cache and cache_dir:
+            _, cache_entry_path = cache_key_path(cache_dir, expected_checksum, pathlib.Path(target_path).name)
+            try:
+                store_in_cache(cache_entry_path, tmp_download)
+            except OSError as exc:
+                if getattr(exc, "errno", None) == 28:
+                    try:
+                        _log_enospc_context(name=name, source=source, target_path=target_path, cache_dir=cache_dir, tmp_path=tmp_download)
+                    except Exception:
+                        pass
+                    return VerifyResult(yaml_file=yaml_file, name=name, target_path=target_path, status="error", message="no space left on device (caching)")
+                else:
+                    log_warn(f"cache store failed for {name}: {exc}")
 
         try:
-            atomic_copy(cache_entry_path if os.path.exists(cache_entry_path) else tmp_download, target_path)
+            if not no_cache and cache_dir:
+                _, maybe_cache_path = cache_key_path(cache_dir, expected_checksum, pathlib.Path(target_path).name)
+                src_path = maybe_cache_path if os.path.exists(maybe_cache_path) else tmp_download
+            else:
+                src_path = tmp_download
+            atomic_copy(src_path, target_path)
         except OSError as exc:
             if getattr(exc, "errno", None) == 28:
                 try:
@@ -801,26 +816,30 @@ def verify_single_model(yaml_file: str, model: Dict[str, object], env: Dict[str,
             pass
 
 
-def check_disk_space(yaml_files: List[str], models_dir: Optional[str], cache_dir: Optional[str], timeout: int, verbose: bool) -> bool:
+def check_disk_space(yaml_files: List[str], models_dir: Optional[str], cache_dir: Optional[str], timeout: int, verbose: bool, use_cache: bool) -> bool:
     """Check if there's enough disk space for all models to be downloaded."""
     env = derive_env(models_dir=models_dir)
 
-    # Default cache dir
-    if cache_dir:
-        resolved_cache_dir = cache_dir
+    # Default cache dir (enabled only when use_cache)
+    if not use_cache:
+        resolved_cache_dir = None
     else:
-        comfy_home = env["COMFY_HOME"]
-        resolved_cache_dir = str(pathlib.Path(comfy_home) / ".cache" / "models")
+        if cache_dir:
+            resolved_cache_dir = cache_dir
+        else:
+            comfy_home = env["COMFY_HOME"]
+            resolved_cache_dir = str(pathlib.Path(comfy_home) / ".cache" / "models")
 
     # Ensure directories exist so that disk space is checked on the correct mount point
     try:
         safe_makedirs(env["MODELS_DIR"])
     except Exception:
         pass
-    try:
-        safe_makedirs(resolved_cache_dir)
-    except Exception:
-        pass
+    if resolved_cache_dir:
+        try:
+            safe_makedirs(resolved_cache_dir)
+        except Exception:
+            pass
 
     # Collect all models that need to be downloaded
     models_to_check = []
@@ -861,19 +880,26 @@ def check_disk_space(yaml_files: List[str], models_dir: Optional[str], cache_dir
         log_info("Все модели уже присутствуют, проверка места на диске не требуется")
         return True
 
-    # Check disk space for models directory and cache directory using effective (quota-aware) values
+    # Check disk space using effective (quota-aware) values
     models_disk_free = get_effective_free_space(env["MODELS_DIR"])
-    cache_disk_free = get_effective_free_space(resolved_cache_dir)
-
-    # Use the minimum free space (both locations must have enough for temp + final)
-    available_space = min(models_disk_free, cache_disk_free)
+    if resolved_cache_dir:
+        cache_disk_free = get_effective_free_space(resolved_cache_dir)
+        # Use the minimum free space (both locations must have enough for temp + final)
+        available_space = min(models_disk_free, cache_disk_free)
+    else:
+        # No cache used; only ensure space in models dir (temp will be under target dir)
+        cache_disk_free = None
+        available_space = models_disk_free
 
     log_info("Проверка места на диске:")
     log_info(f"  Моделей к загрузке: {len(models_to_check)}")
     log_info(f"  Общий размер моделей: {format_bytes(total_size)}")
     log_info(f"  Свободно в MODELS_DIR ({env['MODELS_DIR']}): {format_bytes(models_disk_free)}")
-    log_info(f"  Свободно в CACHE ({resolved_cache_dir}): {format_bytes(cache_disk_free)}")
-    log_info(f"  Будет использовано минимальное доступное: {format_bytes(available_space)}")
+    if resolved_cache_dir:
+        log_info(f"  Свободно в CACHE ({resolved_cache_dir}): {format_bytes(cache_disk_free or 0)}")
+        log_info(f"  Будет использовано минимальное доступное: {format_bytes(available_space)}")
+    else:
+        log_info("  Кэш отключён; проверяется только MODELS_DIR")
 
     if unknown_sizes:
         log_warn(f"Размер неизвестен для моделей: {', '.join(unknown_sizes)}")
@@ -888,20 +914,23 @@ def check_disk_space(yaml_files: List[str], models_dir: Optional[str], cache_dir
         return True
 
 
-def run_validation(yaml_files: List[str], models_dir: Optional[str], cache_dir: Optional[str], overwrite: bool, timeout: int, verbose: bool, validate_only: bool, skip_disk_check: bool, workers: int) -> int:
+def run_validation(yaml_files: List[str], models_dir: Optional[str], cache_dir: Optional[str], overwrite: bool, timeout: int, verbose: bool, validate_only: bool, skip_disk_check: bool, workers: int, use_cache: bool) -> int:
     env = derive_env(models_dir=models_dir)
 
-    # Default cache dir
-    if cache_dir:
-        resolved_cache_dir = cache_dir
+    # Default cache dir (enabled only when use_cache)
+    if not use_cache:
+        resolved_cache_dir = None
     else:
-        comfy_home = env["COMFY_HOME"]
-        resolved_cache_dir = str(pathlib.Path(comfy_home) / ".cache" / "models")
-    safe_makedirs(resolved_cache_dir)
+        if cache_dir:
+            resolved_cache_dir = cache_dir
+        else:
+            comfy_home = env["COMFY_HOME"]
+            resolved_cache_dir = str(pathlib.Path(comfy_home) / ".cache" / "models")
+        safe_makedirs(resolved_cache_dir)
 
     # Check disk space analysis (always, unless explicitly skipped)
     if not skip_disk_check:
-        disk_check_passed = check_disk_space(yaml_files, models_dir, cache_dir, timeout, verbose)
+        disk_check_passed = check_disk_space(yaml_files, models_dir, cache_dir, timeout, verbose, use_cache)
         if not validate_only and not disk_check_passed:
             log_error("Проверка места на диске не пройдена. Остановка выполнения.")
             return 1
@@ -942,7 +971,7 @@ def run_validation(yaml_files: List[str], models_dir: Optional[str], cache_dir: 
     if workers == 1:
         for yaml_file, m in models_to_process:
             try:
-                res = verify_single_model(yaml_file, m, env=env, cache_dir=resolved_cache_dir, overwrite=overwrite, timeout=timeout)
+                res = verify_single_model(yaml_file, m, env=env, cache_dir=(resolved_cache_dir or ""), overwrite=overwrite, timeout=timeout, no_cache=(not use_cache))
                 all_results.append(res)
                 if verbose:
                     log_info(f"{yaml_file} - {res.name}: {res.status} - {res.message}")
@@ -954,7 +983,7 @@ def run_validation(yaml_files: List[str], models_dir: Optional[str], cache_dir: 
         with ThreadPoolExecutor(max_workers=workers) as executor:
             future_to_meta = {}
             for yaml_file, m in models_to_process:
-                future = executor.submit(verify_single_model, yaml_file, m, env, resolved_cache_dir, overwrite, timeout)
+                future = executor.submit(verify_single_model, yaml_file, m, env, (resolved_cache_dir or ""), overwrite, timeout, (not use_cache))
                 future_to_meta[future] = (yaml_file, m)
             for future in as_completed(future_to_meta):
                 yaml_file, m = future_to_meta[future]
@@ -999,6 +1028,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--validate-only", action="store_true", help="Only validate YAML structure, don't download models")
     p.add_argument("--skip-disk-check", action="store_true", help="Skip disk space check before downloading models")
     p.add_argument("--workers", type=int, default=4, help="Number of parallel download workers (default: 4). Use 1 for sequential")
+    p.add_argument("--cache", action="store_true", help="Enable using and writing cache (disabled by default)")
     return p
 
 
@@ -1041,6 +1071,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             validate_only=args.validate_only,
             skip_disk_check=args.skip_disk_check,
             workers=args.workers,
+            use_cache=args.cache,
         )
     except FileNotFoundError as exc:
         log_error(str(exc))

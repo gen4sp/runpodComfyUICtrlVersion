@@ -103,7 +103,7 @@ def install_python_packages(lock: Dict[str, object], verbose: bool) -> None:
         log_info(out)
 
 
-def verify_and_fetch_models(lock_path: Optional[str], env: Dict[str, str], verbose: bool) -> None:
+def verify_and_fetch_models(lock_path: Optional[str], env: Dict[str, str], verbose: bool, no_cache: bool = False) -> None:
     if not lock_path:
         return
     script_path = pathlib.Path("/app/scripts/verify_models.py")
@@ -112,6 +112,8 @@ def verify_and_fetch_models(lock_path: Optional[str], env: Dict[str, str], verbo
         return
     python_exe = _select_python_executable()
     args = [python_exe, str(script_path), "--lock", str(lock_path), "--models-dir", env["MODELS_DIR"], "--verbose"]
+    if no_cache:
+        args.append("--no-cache")
     code, out, err = run(args)
     if code != 0:
         log_warn(f"verify_models failed ({code}): {err}")
@@ -126,7 +128,12 @@ def apply_lock_and_prepare(lock_path: Optional[str], models_dir: Optional[str], 
     install_python_packages(lock, verbose=verbose)
     # 2) Проверить/восстановить модели
     if lock_path:
-        verify_and_fetch_models(lock_path=lock_path, env=env, verbose=verbose)
+        # Enable cache only if explicitly requested via env
+        use_cache = (
+            (os.environ.get("COMFY_ENABLE_CACHE", "").lower() in ("1", "true", "yes"))
+            or (os.environ.get("COMFY_CACHE", "").lower() in ("1", "true", "yes"))
+        )
+        verify_and_fetch_models(lock_path=lock_path, env=env, verbose=verbose, no_cache=(not use_cache))
 
 
 
