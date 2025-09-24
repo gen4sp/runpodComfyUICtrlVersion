@@ -1,4 +1,4 @@
 models:
     - name: "hunyuan-video-clip-l"
-      source: "hf://capstonedubtrack/Indiclanguagedubbing/resolve/416598a2eefa2f1b02bea859bda45f18208a53cb/wav2lip_gan.pth"
+      source: "https://huggingface.co/spaces/capstonedubtrack/Indiclanguagedubbing/resolve/416598a2eefa2f1b02bea859bda45f18208a53cb/wav2lip_gan.pth"
       target_path: "$COMFY_HOME/custom_nodes/Wav2Lip/Wav2Lip/checkpoints/wav2lip_gan.pth"
