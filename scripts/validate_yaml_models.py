@@ -378,6 +378,7 @@ def get_effective_free_space(path: str) -> int:
 
 
 def download_http(url: str, dest_path: str, timeout: int = 60, headers: Optional[Dict[str, str]] = None, show_progress: bool = True) -> None:
+    log_info(f"Downloading {url} -> {dest_path}")
     req_headers = {
         "User-Agent": os.environ.get("HTTP_USER_AGENT", "Mozilla/5.0"),
         "Accept": "*/*",
@@ -422,6 +423,7 @@ def download_file(src_path: str, dest_path: str) -> None:
         path = urllib.request.url2pathname(parsed.path)
     else:
         path = src_path
+    log_info(f"Copying {path} -> {dest_path}")
     if not os.path.exists(path):
         raise FileNotFoundError(f"Source file not found: {path}")
     safe_makedirs(str(pathlib.Path(dest_path).parent))
@@ -430,6 +432,7 @@ def download_file(src_path: str, dest_path: str) -> None:
 
 def download_gs(url: str, dest_path: str) -> None:
     # Prefer gsutil if available (avoids extra python deps)
+    log_info(f"Downloading {url} -> {dest_path}")
     gsutil = shutil.which("gsutil")
     if not gsutil:
         raise RuntimeError("gsutil is required to fetch gs:// URLs; please install Google Cloud SDK or provide http(s)/file source")
@@ -476,6 +479,7 @@ def parse_hf_source(source: str) -> Tuple[str, str, str]:
 def download_hf(source: str, dest_path: str, timeout: int = 60) -> None:
     repo_id, revision, path_in_repo = parse_hf_source(source)
     resolve_url = build_hf_resolve_url(repo_id, revision, path_in_repo)
+    log_info(f"Downloading {source} -> {dest_path}")
     token = os.environ.get("HUGGINGFACE_TOKEN") or os.environ.get("HF_TOKEN")
     headers = {"Authorization": f"Bearer {token}"} if token else None
     download_http(resolve_url, dest_path, timeout=timeout, headers=headers)
@@ -499,6 +503,7 @@ def fetch_to_temp(source: str, tmp_dir: str, timeout: int = 60) -> str:
             if not civitai_build_download_url_and_headers:
                 raise RuntimeError("civitai support is unavailable in this environment")
             url, headers = civitai_build_download_url_and_headers(source)
+            log_info(f"Downloading {source} -> {tmp_path}")
             download_http(url, tmp_path, timeout=timeout, headers=headers)
         else:
             # Treat as local filesystem path
