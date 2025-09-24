@@ -54,6 +54,14 @@ mkdir -p /runpod-volume/comfy/models
 ```
 
 4. Размещение lock-файла: либо включите его в образ (копируется в `/app/lockfiles` при сборке), либо задайте явный путь через `LOCK_PATH`.
+   Для автоматической развёртки окружения на volume используйте `realize_version.py`:
+
+```bash
+# Пример быстрой развёртки версии на volume
+python3 /app/scripts/realize_version.py --version-id "$COMFY_VERSION_NAME"
+# или с явной спеки
+python3 /app/scripts/realize_version.py --spec /app/versions/$COMFY_VERSION_NAME.json
+```
 
 5. Smoke-тест (минимальный воркфлоу):
 

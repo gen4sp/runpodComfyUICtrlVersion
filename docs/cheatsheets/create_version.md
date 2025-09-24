@@ -75,6 +75,23 @@ models:
 
 ## Проверка созданного lock-файла
 
+## Быстрое применение версии из JSON
+
+После создания lock‑файла можно оформить спека‑версию и развернуть её:
+
+```bash
+# versions/my-version.json
+cat > versions/my-version.json << 'JSON'
+{
+  "version_id": "my-version",
+  "lock": "lockfiles/comfy-my-version.lock.json"
+}
+JSON
+
+# Развернуть окружение (создаст отдельный .venv и докачает модели)
+python3 scripts/realize_version.py --version-id "my-version"
+```
+
 ```bash
 cat lockfiles/comfy-my-version.lock.json | jq '.version_name'
 ```

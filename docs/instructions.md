@@ -286,6 +286,24 @@ python3 scripts/pin_requirements.py \
   --offline --wheels-dir /wheels
 ```
 
+### Реализация версии из JSON (versions/\*.json)
+
+Развернуть окружение по декларативной спека‑версии:
+
+```bash
+# По id (ищет versions/<id>.json)
+python3 scripts/realize_version.py --version-id "$COMFY_VERSION_NAME"
+
+# Явный путь к файлу спеки
+python3 scripts/realize_version.py --spec versions/$COMFY_VERSION_NAME.json
+
+# Оффлайн с локальными wheels
+python3 scripts/realize_version.py --version-id "$COMFY_VERSION_NAME" --offline --wheels-dir /wheels
+```
+
+По умолчанию создаётся отдельный каталог `COMFY_HOME` со своим `.venv`,
+кастом‑ноды клонируются по коммитам из lock, модели проверяются/докачиваются в `$COMFY_HOME/models`.
+
 ### Удаление версии
 
 ```bash
