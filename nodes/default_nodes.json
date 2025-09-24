@@ -24,12 +24,6 @@
         "install_requirements": true
     },
     {
-        "name": "ComfyUI-Impact-Pack",
-        "repo": "https://github.com/ltdrdata/ComfyUI-Impact-Pack",
-        "commit": "Main",
-        "install_requirements": true
-    },
-    {
         "name": "ComfyUI-AnimateDiff-Evolved",
         "repo": "https://github.com/Kosinkadink/ComfyUI-AnimateDiff-Evolved",
         "commit": "main",

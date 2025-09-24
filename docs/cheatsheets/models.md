@@ -4,7 +4,7 @@
 
 ```bash
 export COMFY_HOME="$HOME/comfy"
-python3 scripts/validate_yaml_models.py --models-dir "$COMFY_HOME/models"
+python3 scripts/validate_yaml_models.py --models-dir "$MODELS_DIR"
 ```
 
 ## Скачивание конкретного YAML файла
