@@ -4,6 +4,7 @@ __pycache__/
 *.pyc
 *.pyo
 .DS_Store
+lockfiles/
 artifacts/
 baselines/
 tmp/
