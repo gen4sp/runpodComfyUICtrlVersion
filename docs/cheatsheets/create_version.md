@@ -56,6 +56,8 @@ python3 scripts/create_version.py \
 -   `--venv` — путь к виртуальному окружению
 -   `--requirements` — файл с pinned зависимостями
 -   `--models-spec` — YAML/JSON со списком моделей
+-   `--models-dir` — базовая директория для моделей (по умолчанию `$COMFY_HOME/models`)
+-   `--output` — путь для сохранения lock-файла (по умолчанию `lockfiles/comfy-<name>.lock.json`)
 -   `--pretty` — человекочитаемый JSON
 -   `--wheel-url name=url` — подмена URL для пакета
 

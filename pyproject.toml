@@ -1,3 +1,26 @@
+[project]
+name = "runpod-comfyui-version-control"
+version = "0.1.0"
+description = "Набор хелперов и скриптов для воспроизводимого управления версиями ComfyUI на RunPod"
+authors = [
+    {name = "RunPod ComfyUI Team", email = "team@runpod.io"}
+]
+readme = "docs/readme.md"
+requires-python = ">=3.8"
+dependencies = [
+    "google-cloud-storage>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [tool.pytest.ini_options]
 minversion = "7.0"
 addopts = "-q"

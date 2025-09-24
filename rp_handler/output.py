@@ -4,24 +4,11 @@ from __future__ import annotations
 import base64
 import datetime as dt
 import os
-from typing import Optional
 import time
 import uuid
+from typing import Optional
 
-
-def log_info(msg: str) -> None:
-    print(f"[INFO] {msg}")
-
-
-def log_warn(msg: str) -> None:
-    print(f"[WARN] {msg}")
-
-
-def _get_env_bool(name: str, default: bool = False) -> bool:
-    val = os.environ.get(name)
-    if val is None:
-        return default
-    return str(val).strip().lower() in {"1", "true", "yes", "on"}
+from .utils import log_info, log_warn, get_env_bool
 
 
 def _validate_gcs_permissions(client, bucket_name: str, verbose: bool) -> None:
@@ -89,7 +76,7 @@ def emit_output(data: bytes, mode: str, out_file: Optional[str], gcs_bucket: Opt
         project = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCS_PROJECT")
         client = storage.Client(project=project)  # uses GOOGLE_APPLICATION_CREDENTIALS
 
-        if _get_env_bool("GCS_VALIDATE", True):
+        if get_env_bool("GCS_VALIDATE", True):
             _validate_gcs_permissions(client, gcs_bucket, verbose=verbose)
 
         bucket = client.bucket(gcs_bucket)
@@ -111,7 +98,7 @@ def emit_output(data: bytes, mode: str, out_file: Optional[str], gcs_bucket: Opt
             log_info(f"uploaded to {url}")
         
         # Optionally make object public
-        if _get_env_bool("GCS_PUBLIC", False):
+        if get_env_bool("GCS_PUBLIC", False):
             try:
                 blob.acl.all().grant_read()
                 blob.acl.save()

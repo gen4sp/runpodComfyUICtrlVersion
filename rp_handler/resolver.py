@@ -4,62 +4,53 @@ from __future__ import annotations
 import json
 import os
 import pathlib
-import subprocess
+import shutil
 import sys
 from typing import Dict, List, Optional, Tuple
-import shutil
+
+from .utils import log_info, log_warn, log_error, run_command, expand_env_vars, validate_required_path
 
 
-def log_info(msg: str) -> None:
-    print(f"[INFO] {msg}")
-
-
-def log_warn(msg: str) -> None:
-    print(f"[WARN] {msg}")
-
-
-def log_error(msg: str) -> None:
-    print(f"[ERROR] {msg}")
-
-
-def run(cmd: List[str], cwd: Optional[str] = None, env: Optional[Dict[str, str]] = None) -> Tuple[int, str, str]:
-    p = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    out, err = p.communicate()
-    return p.returncode, out.strip(), err.strip()
-
-
-def expand_env(path: str, extra_env: Optional[Dict[str, str]] = None) -> str:
-    if extra_env:
-        env = os.environ.copy()
-        env.update(extra_env)
-        # Explicit substitutions then generic expansion
-        expanded = path.replace("$COMFY_HOME", extra_env.get("COMFY_HOME", ""))
-        expanded = expanded.replace("$MODELS_DIR", extra_env.get("MODELS_DIR", ""))
-        return os.path.expandvars(expanded)
-    return os.path.expandvars(path)
+# Функция expand_env удалена, используется expand_env_vars из utils
 
 
 def derive_env(models_dir: Optional[str]) -> Dict[str, str]:
+    """Вычислить переменные окружения для ComfyUI."""
     env: Dict[str, str] = {}
+    
+    # COMFY_HOME
     comfy_home = os.environ.get("COMFY_HOME")
     if comfy_home:
-        env["COMFY_HOME"] = comfy_home
+        env["COMFY_HOME"] = str(pathlib.Path(comfy_home).resolve())
     else:
-        env["COMFY_HOME"] = str((pathlib.Path("/opt/comfy")).resolve())
-    env["MODELS_DIR"] = models_dir or str(pathlib.Path(env["COMFY_HOME"]) / "models")
+        env["COMFY_HOME"] = str(pathlib.Path("/opt/comfy").resolve())
+    
+    # MODELS_DIR
+    if models_dir:
+        env["MODELS_DIR"] = str(pathlib.Path(models_dir).resolve())
+    else:
+        env["MODELS_DIR"] = str(pathlib.Path(env["COMFY_HOME"]) / "models")
+    
     return env
 
 
 def load_lock(path: Optional[str]) -> Dict[str, object]:
+    """Загрузить lock-файл."""
     if not path:
         log_warn("No lock file path provided; continuing with minimal setup")
         return {}
+    
     lock_path = pathlib.Path(path)
     if not lock_path.exists():
         log_warn(f"Lock file not found: {lock_path}")
         return {}
-    data = json.loads(lock_path.read_text(encoding="utf-8"))
-    return data
+    
+    try:
+        data = json.loads(lock_path.read_text(encoding="utf-8"))
+        return data
+    except (json.JSONDecodeError, OSError) as e:
+        log_error(f"Failed to load lock file {lock_path}: {e}")
+        return {}
 
 
 def _select_python_executable() -> str:
@@ -72,18 +63,21 @@ def _select_python_executable() -> str:
 
 
 def install_python_packages(lock: Dict[str, object], verbose: bool) -> None:
+    """Установить Python пакеты согласно lock-файлу."""
     python = lock.get("python") if isinstance(lock, dict) else None
     if not isinstance(python, dict):
         log_warn("No python section in lock; skipping packages install")
         return
+    
     packages = python.get("packages")
     if not isinstance(packages, list) or not packages:
         log_warn("Empty python.packages; skipping")
         return
-    # Выбор интерпретера Python: lock.python.interpreter -> $COMFY_HOME/.venv -> системный
+    
+    # Выбор интерпретера Python
     python_interpreter: str = _resolve_python_interpreter(lock, verbose=verbose)
 
-    # Compose pip install args from lock
+    # Составление аргументов pip install
     args: List[str] = [python_interpreter, "-m", "pip", "install"]
     for item in packages:
         if not isinstance(item, dict):
@@ -97,9 +91,11 @@ def install_python_packages(lock: Dict[str, object], verbose: bool) -> None:
             args.append(f"{name}=={ver}")
         elif name:
             args.append(name)
+    
     if verbose:
         log_info("pip install: " + " ".join(args[4:]))
-    code, out, err = run(args)
+    
+    code, out, err = run_command(args)
     if code != 0:
         log_warn(f"pip install returned {code}: {err}")
     elif verbose:
@@ -107,13 +103,11 @@ def install_python_packages(lock: Dict[str, object], verbose: bool) -> None:
 
 
 def verify_and_fetch_models(lock_path: Optional[str], env: Dict[str, str], verbose: bool, no_cache: bool = False) -> None:
+    """Проверить и загрузить модели согласно lock-файлу."""
     if not lock_path:
         return
 
-    # Ищем скрипт verify_models.py в нескольких возможных местах:
-    # 1. /app/scripts/verify_models.py (Docker контейнер)
-    # 2. scripts/verify_models.py относительно текущего файла
-    # 3. scripts/verify_models.py относительно рабочей директории
+    # Поиск скрипта verify_models.py
     possible_paths = [
         pathlib.Path("/app/scripts/verify_models.py"),
         pathlib.Path(__file__).parent.parent / "scripts" / "verify_models.py",
@@ -129,12 +123,21 @@ def verify_and_fetch_models(lock_path: Optional[str], env: Dict[str, str], verbo
     if not script_path:
         log_warn("verify_models.py not found; skipping model verification")
         return
-    # Если есть venv в $COMFY_HOME, используем его интерпретер для запуска скрипта
+    
+    # Выбор Python интерпретера
     python_exe = _venv_python_from_env() or _select_python_executable()
-    args = [python_exe, str(script_path), "--lock", str(lock_path), "--models-dir", env["MODELS_DIR"], "--verbose"]
+    
+    # Составление аргументов
+    args = [
+        python_exe, str(script_path), 
+        "--lock", str(lock_path), 
+        "--models-dir", env["MODELS_DIR"], 
+        "--verbose"
+    ]
     if not no_cache:
         args.append("--cache")
-    code, out, err = run(args)
+    
+    code, out, err = run_command(args)
     if code != 0:
         log_warn(f"verify_models failed ({code}): {err}")
     elif verbose:
@@ -142,16 +145,21 @@ def verify_and_fetch_models(lock_path: Optional[str], env: Dict[str, str], verbo
 
 
 def apply_lock_and_prepare(lock_path: Optional[str], models_dir: Optional[str], verbose: bool) -> None:
+    """Применить lock-файл и подготовить окружение."""
     env = derive_env(models_dir=models_dir)
-    # Экспортируем вычисленные значения в окружение процесса, чтобы их видели дочерние вызовы
+    
+    # Экспорт переменных в окружение процесса
     os.environ["COMFY_HOME"] = env["COMFY_HOME"]
     os.environ["MODELS_DIR"] = env["MODELS_DIR"]
+    
     lock = load_lock(lock_path)
-    # 1) Установить python пакеты согласно lock
+    
+    # 1) Установить Python пакеты согласно lock
     install_python_packages(lock, verbose=verbose)
+    
     # 2) Проверить/восстановить модели
     if lock_path:
-        # Enable cache only if explicitly requested via env
+        # Включение кэша только если явно запрошено через env
         use_cache = (
             (os.environ.get("COMFY_ENABLE_CACHE", "").lower() in ("1", "true", "yes"))
             or (os.environ.get("COMFY_CACHE", "").lower() in ("1", "true", "yes"))

@@ -332,6 +332,8 @@ docker run --rm \
 
 ### Локальный запуск handler (без Docker)
 
+Handler теперь поддерживает реальное выполнение ComfyUI workflow в headless режиме:
+
 ```bash
 ./scripts/run_handler_local.sh \
   --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json \
@@ -339,12 +341,18 @@ docker run --rm \
   --output base64
 ```
 
-пример
+Новые параметры handler:
+
+-   `--models-dir` — базовая директория для моделей (по умолчанию `$COMFY_HOME/models`)
+-   `--output` — режим вывода: `base64` или `gcs` (по умолчанию `gcs`)
+
+Пример с новыми параметрами:
 
 ```bash
 ./scripts/run_handler_local.sh \
-  --lock lockfiles/lockfiles/comfy-comfytest.lock.json \
+  --lock lockfiles/comfy-comfytest.lock.json \
   --workflow ./workflows/minimal.json \
+  --models-dir "$COMFY_HOME/models" \
   --output base64
 
 ```

@@ -11,6 +11,8 @@ from typing import Any, Dict, Optional
 
 from .resolver import apply_lock_and_prepare
 from .output import emit_output
+from .workflow import run_workflow
+from .utils import validate_required_path
 
 
 def read_text(path: str) -> str:
@@ -31,16 +33,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return p
 
 
-def run_workflow_dummy(workflow_path: Optional[str]) -> bytes:
-    # Заглушка выполнения: возвращает содержимое workflow или статичный байтовый PNG
-    if workflow_path and pathlib.Path(workflow_path).exists():
-        content = read_text(workflow_path)
-        return content.encode("utf-8")
-    # Статичный минимальный PNG (1x1 прозрачный) как демонстрация
-    transparent_png_base64 = (
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=="
-    )
-    return base64.b64decode(transparent_png_base64)
+def run_workflow_real(workflow_path: Optional[str], comfy_home: str, models_dir: str, verbose: bool) -> bytes:
+    """Выполнить реальный workflow через ComfyUI."""
+    if not workflow_path:
+        # Если workflow не указан, возвращаем заглушку
+        transparent_png_base64 = (
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=="
+        )
+        return base64.b64decode(transparent_png_base64)
+    
+    # Валидируем входные данные
+    validate_required_path(workflow_path, "Workflow file")
+    validate_required_path(comfy_home, "ComfyUI home directory")
+    validate_required_path(models_dir, "Models directory")
+    
+    # Выполняем workflow
+    return run_workflow(workflow_path, comfy_home, models_dir, verbose)
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -50,8 +58,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     # 1) Применить lock-файл: подготовить окружение, проверить модели
     apply_lock_and_prepare(lock_path=args.lock, models_dir=args.models_dir, verbose=args.verbose)
 
-    # 2) Выполнить воркфлоу (здесь — заглушка)
-    artifact_bytes = run_workflow_dummy(args.workflow)
+    # 2) Выполнить воркфлоу через реальный раннер
+    comfy_home = os.environ.get("COMFY_HOME", "/opt/comfy")
+    models_dir = args.models_dir or os.environ.get("MODELS_DIR", f"{comfy_home}/models")
+    artifact_bytes = run_workflow_real(args.workflow, comfy_home, models_dir, args.verbose)
 
     # 3) Эмит результата
     emit_output(
