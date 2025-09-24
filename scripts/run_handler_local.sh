@@ -50,7 +50,6 @@ if [ -n "$OUT_FILE" ]; then
   ARGS+=(--out-file "$OUT_FILE")
 fi
 
-echo "Running: $PYTHON_BIN -m rp_handler.main ${ARGS[*]}"
-"$PYTHON_BIN" -m rp_handler.main "${ARGS[@]}"
+exec "$PYTHON_BIN" -m rp_handler.main "${ARGS[@]}"
 
 
