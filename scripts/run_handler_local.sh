@@ -39,10 +39,18 @@ if [ -z "$WORKFLOW" ]; then echo "--workflow required" >&2; exit 1; fi
 cd "$ROOT_DIR"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
-"$PYTHON_BIN" -m rp_handler.main \
-  --lock "$LOCK" \
-  --workflow "$WORKFLOW" \
-  ${OUTPUT:+--output "$OUTPUT"} \
-  ${OUT_FILE:+--out-file "$OUT_FILE"}
+# Build command arguments
+ARGS=()
+ARGS+=(--lock "$LOCK")
+ARGS+=(--workflow "$WORKFLOW")
+if [ -n "$OUTPUT" ]; then
+  ARGS+=(--output "$OUTPUT")
+fi
+if [ -n "$OUT_FILE" ]; then
+  ARGS+=(--out-file "$OUT_FILE")
+fi
+
+echo "Running: $PYTHON_BIN -m rp_handler.main ${ARGS[*]}"
+"$PYTHON_BIN" -m rp_handler.main "${ARGS[@]}"
 
 

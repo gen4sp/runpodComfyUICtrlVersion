@@ -339,6 +339,16 @@ docker run --rm \
   --output base64
 ```
 
+пример
+
+```bash
+./scripts/run_handler_local.sh \
+  --lock lockfiles/lockfiles/comfy-comfytest.lock.json \
+  --workflow ./workflows/minimal.json \
+  --output base64
+
+```
+
 По умолчанию используется вывод в GCS. Можно явно указать `--output base64` для работы без облака.
 
 ### Репродукция и регрессия
