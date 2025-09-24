@@ -1,5 +1,11 @@
 # Установка кастом нод и зависимостей
 
+```bash
+
+python3 scripts/validate_json_nodes.py --install-reqs --verbose
+
+```
+
 ## Пиновка зависимостей из requirements.txt
 
 ```bash
