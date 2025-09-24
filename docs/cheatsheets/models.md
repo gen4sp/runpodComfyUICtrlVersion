@@ -4,7 +4,7 @@
 
 ```bash
 export COMFY_HOME="$HOME/comfy"
-python3 scripts/validate_yaml_models.py --models-dir "$COMFY_HOME/models" --cache-dir "$COMFY_HOME/.cache/models"
+python3 scripts/validate_yaml_models.py --models-dir "$COMFY_HOME/models"
 ```
 
 ## Скачивание конкретного YAML файла
@@ -13,10 +13,10 @@ python3 scripts/validate_yaml_models.py --models-dir "$COMFY_HOME/models" --cach
 python3 scripts/validate_yaml_models.py --yaml models/flux-models.yml --models-dir "$COMFY_HOME/models"
 ```
 
-## Валидация моделей без скачивания (dry-run)
+## Валидация моделей без скачивания
 
 ```bash
-python3 scripts/validate_yaml_models.py --yaml models/wan22-fast-models.yml --models-dir "$COMFY_HOME/models" --dry-run
+python3 scripts/validate_yaml_models.py --yaml models/wan22-fast-models.yml --models-dir "$COMFY_HOME/models" --validate-only
 ```
 
 ## Верификация моделей из lock-файла
@@ -35,18 +35,17 @@ python3 scripts/verify_models.py --lock lockfiles/comfy-my-version.lock.json --m
 
 -   `--yaml FILE` — конкретный YAML файл (по умолчанию: все в models/)
 -   `--models-dir DIR` — директория моделей (обязательно)
--   `--cache-dir DIR` — директория кэша (по умолчанию: $COMFY_HOME/.cache/models)
--   `--cache` — использовать кэш для повторных скачиваний
--   `--dry-run` — только проверка без скачивания
+-   `--validate-only` — только проверка без скачивания
 -   `--overwrite` — перезаписывать существующие файлы
--   `--max-workers N` — количество параллельных потоков (по умолчанию: 4)
+-   `--workers N` — количество параллельных потоков (по умолчанию: 4)
 -   `--timeout SEC` — таймаут загрузки (по умолчанию: 120)
+
+> **Предупреждение**: Кеш не используется и не рекомендуется. Все модели скачиваются напрямую в директорию назначения.
 
 ## Параметры verify_models.py
 
 -   `--lock FILE` — путь к lock-файлу (обязательно)
 -   `--models-dir DIR` — базовая директория моделей
--   `--cache-dir DIR` — директория кэша
 -   `--overwrite` — перезаписывать при несоответствии checksum
 -   `--timeout SEC` — таймаут сетевых загрузок
 -   `--verbose` — подробный вывод

@@ -1,0 +1,20 @@
+[
+    {
+        "name": "ComfyUI-GGUF",
+        "repo": "https://github.com/city96/ComfyUI-GGUF",
+        "commit": "main",
+        "install_requirements": true
+    },
+    {
+        "name": "ComfyUI-FluxTrainer",
+        "repo": "https://github.com/kijai/ComfyUI-FluxTrainer",
+        "commit": "main",
+        "install_requirements": true
+    },
+    {
+        "name": "x-flux-comfyui",
+        "repo": "https://github.com/XLabs-AI/x-flux-comfyui",
+        "commit": "main",
+        "install_requirements": true
+    }
+]

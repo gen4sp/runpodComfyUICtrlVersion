@@ -1,0 +1,62 @@
+[
+    {
+        "name": "ComfyUI-Manager",
+        "repo": "https://github.com/ltdrdata/ComfyUI-Manager",
+        "commit": "main",
+        "install_requirements": true
+    },
+    {
+        "name": "ComfyUI_experiments",
+        "repo": "https://github.com/comfyanonymous/ComfyUI_experiments",
+        "commit": "master",
+        "install_requirements": true
+    },
+    {
+        "name": "ComfyUI-VideoHelperSuite",
+        "repo": "https://github.com/kijai/ComfyUI-VideoHelperSuite",
+        "commit": "main",
+        "install_requirements": true
+    },
+    {
+        "name": "comfyui_controlnet_aux",
+        "repo": "https://github.com/Fannovel16/comfyui_controlnet_aux",
+        "commit": "main",
+        "install_requirements": true
+    },
+    {
+        "name": "ComfyUI-Impact-Pack",
+        "repo": "https://github.com/ltdrdata/ComfyUI-Impact-Pack",
+        "commit": "Main",
+        "install_requirements": true
+    },
+    {
+        "name": "ComfyUI-AnimateDiff-Evolved",
+        "repo": "https://github.com/Kosinkadink/ComfyUI-AnimateDiff-Evolved",
+        "commit": "main",
+        "install_requirements": true
+    },
+    {
+        "name": "ComfyUI-IPAdapter-Plus",
+        "repo": "https://github.com/cubiq/ComfyUI_IPAdapter_plus",
+        "commit": "main",
+        "install_requirements": true
+    },
+    {
+        "name": "ComfyUI-Advanced-ControlNet",
+        "repo": "https://github.com/Kosinkadink/ComfyUI-Advanced-ControlNet",
+        "commit": "main",
+        "install_requirements": true
+    },
+    {
+        "name": "ComfyUI-Image-Selector",
+        "repo": "https://github.com/SLAPaper/ComfyUI-Image-Selector",
+        "commit": "main",
+        "install_requirements": true
+    },
+    {
+        "name": "ComfyUI-WD14-Tagger",
+        "repo": "https://github.com/pythongosssss/ComfyUI-WD14-Tagger",
+        "commit": "main",
+        "install_requirements": true
+    }
+]

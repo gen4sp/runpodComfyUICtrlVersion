@@ -1,0 +1,15 @@
+[
+    {
+        "name": "ComfyUI-GGUF",
+        "repo": "https://github.com/city96/ComfyUI-GGUF",
+        "commit": "main",
+        "target_dir": "$COMFY_HOME/custom_nodes/ComfyUI-GGUF",
+        "install_requirements": true
+    },
+    {
+        "name": "ComfyUI-WanVideoWrapper",
+        "repo": "https://github.com/kijai/ComfyUI-WanVideoWrapper",
+        "commit": "main",
+        "install_requirements": true
+    }
+]

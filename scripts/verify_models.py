@@ -6,13 +6,11 @@ Features:
 - Expands env vars in target paths (supports $COMFY_HOME and $MODELS_DIR)
 - Checks file presence and checksum (sha256 preferred; md5 supported)
 - Downloads missing artifacts from `source` (http(s), file path, gs:// via gsutil)
-- Caches downloads by checksum to avoid re-downloading
 
 Usage example:
   python3 scripts/verify_models.py \
     --lock lockfiles/comfy-<name>.lock.json \
-    --models-dir "$COMFY_HOME/models" \
-    --cache-dir "$COMFY_HOME/.cache/models" [--cache]
+    --models-dir "$COMFY_HOME/models"
 
 Exit codes:
   0: all models present and valid (or successfully downloaded)
@@ -126,27 +124,6 @@ def run_command(command: List[str]) -> Tuple[int, str, str]:
 # ----------------------------- Cache management ----------------------------- #
 
 
-def cache_key_path(cache_dir: str, checksum_value: Optional[str], fallback_name: str) -> Tuple[str, str]:
-    """Return (dir, path) for a cache entry.
-
-    If checksum is known (algo:hex), use `<cache>/<algo>/<hex>`.
-    Otherwise, use `<cache>/by-name/<fallback_name>`.
-    """
-    if checksum_value:
-        algo, hexpart = parse_checksum(checksum_value)
-        if algo and hexpart:
-            entry_dir = pathlib.Path(cache_dir) / algo / hexpart[:2] / hexpart
-            return str(entry_dir), str(entry_dir / "blob")
-    entry_dir = pathlib.Path(cache_dir) / "by-name" / fallback_name
-    return str(entry_dir), str(entry_dir / "blob")
-
-
-def store_in_cache(cache_path: str, src_path: str) -> None:
-    safe_makedirs(str(pathlib.Path(cache_path).parent))
-    if os.path.exists(cache_path):
-        return
-    # Use atomic copy
-    atomic_copy(src_path, cache_path)
 
 
 # ------------------------------- Downloaders -------------------------------- #
@@ -329,7 +306,7 @@ def derive_env(models_dir: Optional[str]) -> Dict[str, str]:
     return env
 
 
-def verify_single_model(model: Dict[str, object], env: Dict[str, str], cache_dir: str, overwrite: bool, timeout: int, no_cache: bool) -> VerifyResult:
+def verify_single_model(model: Dict[str, object], env: Dict[str, str], overwrite: bool, timeout: int) -> VerifyResult:
     name = str(model.get("name"))
     target_path_raw = str(model.get("target_path"))
     if not target_path_raw:
@@ -337,7 +314,6 @@ def verify_single_model(model: Dict[str, object], env: Dict[str, str], cache_dir
 
     target_path = expand_env(target_path_raw, extra_env=env)
     expected_algo, expected_hex = parse_checksum(model.get("checksum") if isinstance(model.get("checksum"), str) else None)
-    expected_checksum = f"{expected_algo}:{expected_hex}" if expected_algo and expected_hex else None
     source = (None if model.get("source") in (None, "") else str(model.get("source")))
 
     # Quick OK path: file exists and checksum matches (if provided)
@@ -345,14 +321,6 @@ def verify_single_model(model: Dict[str, object], env: Dict[str, str], cache_dir
         if expected_algo and expected_hex:
             actual = compute_checksum(target_path, algo=expected_algo)
             if actual.split(":", 1)[1] == expected_hex:
-                # Populate cache if missing (unless disabled)
-                if not no_cache and cache_dir:
-                    cache_entry_dir, cache_entry_path = cache_key_path(cache_dir, expected_checksum, pathlib.Path(target_path).name)
-                    if not os.path.exists(cache_entry_path):
-                        try:
-                            store_in_cache(cache_entry_path, target_path)
-                        except Exception as exc:
-                            log_warn(f"cache store failed for {name}: {exc}")
                 return VerifyResult(name=name, target_path=target_path, status="ok", message="present")
             else:
                 if not source:
@@ -362,36 +330,14 @@ def verify_single_model(model: Dict[str, object], env: Dict[str, str], cache_dir
                 # Fall through to re-fetch
         else:
             # No expected checksum: consider present
-            # Also add to cache keyed by derived sha256
-            if not no_cache and cache_dir:
-                try:
-                    actual_sha = compute_checksum(target_path, algo="sha256")
-                    _, cache_entry_path = cache_key_path(cache_dir, actual_sha, pathlib.Path(target_path).name)
-                    if not os.path.exists(cache_entry_path):
-                        store_in_cache(cache_entry_path, target_path)
-                except Exception:
-                    pass
             return VerifyResult(name=name, target_path=target_path, status="ok", message="present (no checksum)")
 
     # At this point: file missing OR mismatch with overwrite allowed
     if not source:
         return VerifyResult(name=name, target_path=target_path, status="error", message="missing and no source provided")
 
-    # Try cache when checksum known (unless disabled)
-    if not no_cache and expected_checksum and cache_dir:
-        cache_entry_dir, cache_entry_path = cache_key_path(cache_dir, expected_checksum, pathlib.Path(target_path).name)
-        if os.path.exists(cache_entry_path):
-            try:
-                atomic_copy(cache_entry_path, target_path)
-                return VerifyResult(name=name, target_path=target_path, status="downloaded", message="restored from cache")
-            except Exception as exc:
-                log_warn(f"failed to restore from cache for {name}: {exc}")
-
-    # Fetch from source to temp (prefer cache dir when enabled to stay on same mount)
-    if not no_cache and cache_dir:
-        tmp_parent = cache_dir
-    else:
-        tmp_parent = str(pathlib.Path(target_path).parent)
+    # Fetch from source to temp
+    tmp_parent = str(pathlib.Path(target_path).parent)
     tmp_dir = tempfile.mkdtemp(prefix="verify_models_", dir=tmp_parent)
     try:
         tmp_download = fetch_to_temp(source, tmp_dir=tmp_dir, timeout=timeout)
@@ -400,27 +346,9 @@ def verify_single_model(model: Dict[str, object], env: Dict[str, str], cache_dir
             actual = compute_checksum(tmp_download, algo=expected_algo)
             if actual.split(":", 1)[1] != expected_hex:
                 return VerifyResult(name=name, target_path=target_path, status="error", message="downloaded checksum mismatch")
-        else:
-            # Derive sha256 for caching
-            try:
-                derived_sha = compute_checksum(tmp_download, algo="sha256")
-            except Exception:
-                derived_sha = None  # type: ignore[assignment]
-            if derived_sha:
-                expected_checksum = derived_sha
 
-        # Store to cache (if enabled) and copy to target
-        if not no_cache and cache_dir:
-            _, cache_entry_path = cache_key_path(cache_dir, expected_checksum, pathlib.Path(target_path).name)
-            try:
-                store_in_cache(cache_entry_path, tmp_download)
-            except Exception as exc:
-                log_warn(f"cache store failed for {name}: {exc}")
-            src_path = cache_entry_path if os.path.exists(cache_entry_path) else tmp_download
-        else:
-            src_path = tmp_download
-
-        atomic_copy(src_path, target_path)
+        # Copy to target
+        atomic_copy(tmp_download, target_path)
         return VerifyResult(name=name, target_path=target_path, status=("updated" if os.path.exists(target_path) else "downloaded"), message="fetched from source")
     finally:
         try:
@@ -429,28 +357,17 @@ def verify_single_model(model: Dict[str, object], env: Dict[str, str], cache_dir
             pass
 
 
-def run_verification(lock_path: str, models_dir: Optional[str], cache_dir: Optional[str], overwrite: bool, timeout: int, verbose: bool, use_cache: bool) -> int:
+def run_verification(lock_path: str, models_dir: Optional[str], overwrite: bool, timeout: int, verbose: bool) -> int:
     env = derive_env(models_dir=models_dir)
     models = load_lock_models(lock_path)
     if not models:
         log_info("No models section in lock file; nothing to verify")
         return 0
 
-    # Default cache dir (enabled only when use_cache)
-    if not use_cache:
-        resolved_cache_dir = None
-    else:
-        if cache_dir:
-            resolved_cache_dir = cache_dir
-        else:
-            comfy_home = env["COMFY_HOME"]
-            resolved_cache_dir = str(pathlib.Path(comfy_home) / ".cache" / "models")
-        safe_makedirs(resolved_cache_dir)
-
     results: List[VerifyResult] = []
     for m in models:
         try:
-            res = verify_single_model(m, env=env, cache_dir=(resolved_cache_dir or ""), overwrite=overwrite, timeout=timeout, no_cache=(not use_cache))
+            res = verify_single_model(m, env=env, overwrite=overwrite, timeout=timeout)
             results.append(res)
             if verbose:
                 log_info(f"{res.name}: {res.status} - {res.message}")
@@ -475,11 +392,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Verify and download models from lock file")
     p.add_argument("--lock", required=True, help="Path to lock file (JSON)")
     p.add_argument("--models-dir", default=None, help="Base models dir for $MODELS_DIR expansion (default: $COMFY_HOME/models)")
-    p.add_argument("--cache-dir", default=None, help="Cache directory for downloaded artifacts (default: $COMFY_HOME/.cache/models)")
     p.add_argument("--overwrite", action="store_true", help="Overwrite existing files if checksum mismatch and source is available")
     p.add_argument("--timeout", type=int, default=120, help="Network timeout in seconds for http(s)/gs downloads")
     p.add_argument("--verbose", action="store_true", help="Verbose output (per-model status)")
-    p.add_argument("--cache", action="store_true", help="Enable using and writing cache (disabled by default)")
     return p
 
 
@@ -490,11 +405,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         return run_verification(
             lock_path=args.lock,
             models_dir=args.models_dir,
-            cache_dir=args.cache_dir,
             overwrite=args.overwrite,
             timeout=args.timeout,
             verbose=args.verbose,
-            use_cache=args.cache,
         )
     except FileNotFoundError as exc:
         log_error(str(exc))
