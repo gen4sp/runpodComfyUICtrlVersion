@@ -1,0 +1,4 @@
+models:
+    - name: "hunyuan-video-clip-l"
+      source: "hf://capstonedubtrack/Indiclanguagedubbing/resolve/416598a2eefa2f1b02bea859bda45f18208a53cb/wav2lip_gan.pth"
+      target_path: "$MODELS_DIR/checkpoints/wav2lip_gan.pth"
