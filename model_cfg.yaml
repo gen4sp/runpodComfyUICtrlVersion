@@ -22,8 +22,8 @@ comfyui:
     configs: configs/
     controlnet: controlnet/
     diffusion_models: |
-        diffusion_models
-        unet
+        diffusion_models/
+        unet/
     embeddings: embeddings/
     loras: loras/
     upscale_models: upscale_models/
