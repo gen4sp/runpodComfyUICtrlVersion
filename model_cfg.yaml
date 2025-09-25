@@ -1,11 +1,30 @@
-my_external_assets:
-    # База, от которой считаете подпапки
+# my_external_assets:
+#     # База, от которой считаете подпапки
+#     base_path: /workspace/models
+#     # Подпапки относительно base_path (можно указывать абсолютные пути)
+#     checkpoints: checkpoints
+#     loras: loras
+#     vae: vae
+#     controlnet: controlnet
+#     clip: clip
+#     t5: t5
+#     diffusion_models: diffusion_models
+
+# Доп. путь для кастом-нод
+
+comfyui:
     base_path: /workspace/models
-    # Подпапки относительно base_path (можно указывать абсолютные пути)
-    checkpoints: checkpoints
-    loras: loras
-    vae: vae
-    controlnet: controlnet
-    clip: clip
-    t5: t5
-    # Доп. путь для кастом-нод
+    # You can use is_default to mark that these folders should be listed first, and used as the default dirs for eg downloads
+    #is_default: true
+    checkpoints: checkpoints/
+    clip: clip/
+    clip_vision: clip_vision/
+    configs: configs/
+    controlnet: controlnet/
+    diffusion_models: |
+        diffusion_models
+        unet
+    embeddings: embeddings/
+    loras: loras/
+    upscale_models: upscale_models/
+    vae: vae/
