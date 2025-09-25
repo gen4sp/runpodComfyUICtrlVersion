@@ -44,8 +44,7 @@ python3 scripts/verify_models.py --lock lockfiles/comfy-my-version.lock.json --m
 
 ## Параметры verify_models.py
 
--   `--lock FILE` — путь к lock-файлу (обязательно)
--   `--models-dir DIR` — базовая директория моделей
+-   `--models-dir DIR` — базовая директория моделей (по умолчанию `$COMFY_HOME/models`)
 -   `--overwrite` — перезаписывать при несоответствии checksum
 -   `--timeout SEC` — таймаут сетевых загрузок
 -   `--verbose` — подробный вывод

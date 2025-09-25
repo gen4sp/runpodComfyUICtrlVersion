@@ -6,8 +6,8 @@
 
 -   создаёт изолированный `COMFY_HOME` с отдельным `.venv`
 -   клонирует `ComfyUI` и кастом‑ноды по зафиксированным `commit SHA`
--   устанавливает pinned зависимости из lock‑файла
--   проверяет и докачивает модели по lock‑файлу
+-   устанавливает зависимости и кастом‑ноды по `resolved-lock`
+-   проверяет и докачивает модели в единый `MODELS_DIR`
 
 Подходит для локальной разработки, Pods на RunPod (volume) и CI.
 
@@ -15,15 +15,18 @@
 
 ```json
 {
+    "schema_version": 2,
     "version_id": "wan22-fast",
-    "lock": "lockfiles/comfy-wan2.2.lock.json",
-    "target": "/runpod-volume/comfy-wan22-fast",
-    "options": {
-        "offline": false,
-        "skip_models": false,
-        "wheels_dir": "/wheels",
-        "pip_extra_args": "--no-cache-dir"
-    }
+    "comfy": {
+        "repo": "https://github.com/comfyanonymous/ComfyUI",
+        "ref": "master"
+    },
+    "custom_nodes": [
+        { "repo": "https://github.com/city96/ComfyUI-GGUF", "name": "gguf" }
+    ],
+    "models": [{ "source": "hf://...", "target_subdir": "unet" }],
+    "env": {},
+    "options": { "offline": false, "skip_models": false }
 }
 ```
 
@@ -46,12 +49,11 @@ python3 scripts/realize_version.py --version-id wan22-fast
 python3 scripts/realize_version.py --spec versions/wan22-fast.json
 ```
 
-### Переопределить lock и target
+### Дополнительные опции
 
 ```bash
 python3 scripts/realize_version.py \
   --spec versions/wan22-fast.json \
-  --lock lockfiles/comfy-wan2.2.lock.json \
   --target /runpod-volume/comfy-wan22-fast
 ```
 

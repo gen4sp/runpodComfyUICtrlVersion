@@ -4,7 +4,7 @@
 
 ```bash
 ./scripts/run_handler_local.sh \
-  --lock lockfiles/comfy-my-version.lock.json \
+  --version-id my-version \
   --workflow ./workflows/minimal.json \
   --output base64
 ```
@@ -17,7 +17,7 @@ export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"
 export GOOGLE_CLOUD_PROJECT="my-project"
 
 ./scripts/run_handler_local.sh \
-  --lock lockfiles/comfy-my-version.lock.json \
+  --version-id my-version \
   --workflow ./workflows/wan_t2i.js \
   --output gcs
 ```
@@ -30,14 +30,15 @@ export MODELS_DIR="$COMFY_HOME/models"
 export COMFY_VERSION_NAME="my-version"
 
 ./scripts/run_handler_local.sh \
-  --lock lockfiles/comfy-my-version.lock.json \
+  --version-id "$COMFY_VERSION_NAME" \
   --workflow ./workflows/flux_kontext_dev_basic.js \
   --output base64
 ```
 
 ## Параметры run_handler_local.sh
 
--   `--lock FILE` — путь к lock-файлу (обязательно)
+-   `--version-id ID` — идентификатор версии (использует `versions/<id>.json`)
+-   `--spec FILE` — путь к файлу спецификации версии (альтернатива `--version-id`)
 -   `--workflow FILE` — путь к workflow файлу (обязательно)
 -   `--output base64|gcs` — режим вывода (по умолчанию: gcs)
 
@@ -258,12 +259,8 @@ export COMFY_VERSION_NAME="production-v1"
 export GCS_BUCKET="my-comfy-production"
 export GOOGLE_APPLICATION_CREDENTIALS="/runpod-volume/keys/prod-service-account.json"
 
-# Клонирование версии если нужно
-if [ ! -d "$COMFY_HOME" ]; then
-    /workspace/scripts/clone_version.sh \
-        --lock /workspace/lockfiles/comfy-production-v1.lock.json \
-        --target "$COMFY_HOME"
-fi
+# Клонирование версии если нужно (через realize)
+python3 /workspace/scripts/realize_version.py --version-id "$COMFY_VERSION_NAME" || exit 1
 
 # Запуск ComfyUI
 cd "$COMFY_HOME"

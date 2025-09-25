@@ -1,7 +1,13 @@
 {
+    "schema_version": 2,
     "version_id": "test-ver",
-    "lock": "lockfiles/comfy-wan2.2.lock.json",
-    "target": "/workspace/comfy-test-ver",
+    "comfy": {
+        "repo": "https://github.com/comfyanonymous/ComfyUI",
+        "ref": "master"
+    },
+    "custom_nodes": [],
+    "models": [],
+    "env": {},
     "options": {
         "offline": false,
         "skip_models": false

@@ -167,6 +167,244 @@ def apply_lock_and_prepare(lock_path: Optional[str], models_dir: Optional[str], 
         verify_and_fetch_models(lock_path=lock_path, env=env, verbose=verbose, no_cache=(not use_cache))
 
 
+# ------------------------- New version resolve/realize API ------------------------- #
+
+def _repo_root() -> pathlib.Path:
+    return pathlib.Path(__file__).resolve().parent.parent
+
+
+def _read_json(path: pathlib.Path) -> Dict[str, object]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _safe_write_json(path: pathlib.Path, data: Dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _slug_from_repo(repo_url: str) -> str:
+    # crude slug: last path segment without .git
+    tail = repo_url.rstrip("/").split("/")[-1]
+    return tail[:-4] if tail.endswith(".git") else tail
+
+
+def _git_ls_remote(repo: str, ref: Optional[str]) -> Optional[str]:
+    # Resolve ref to commit using git ls-remote
+    if not ref or not str(ref).strip():
+        ref = "HEAD"
+    code, out, err = run_command(["git", "ls-remote", repo, str(ref)])
+    if code != 0:
+        log_warn(f"git ls-remote failed for {repo} {ref}: {err}")
+        return None
+    # out lines: '<sha>\t<ref>' or single line for HEAD
+    for line in out.splitlines():
+        parts = line.strip().split("\t", 1)
+        if parts and len(parts[0]) == 40:
+            return parts[0]
+    return None
+
+
+def _pick_default_comfy_home(version_id: str) -> pathlib.Path:
+    # Prefer explicit COMFY_HOME from env
+    env_home = os.environ.get("COMFY_HOME")
+    if env_home:
+        return pathlib.Path(env_home)
+    # Prefer RunPod mounts
+    for base in (pathlib.Path("/runpod-volume"), pathlib.Path("/workspace")):
+        if base.exists() and base.is_dir():
+            return base / f"comfy-{version_id}"
+    # Fallbacks
+    home = os.environ.get("HOME")
+    if home:
+        return pathlib.Path(home) / f"comfy-{version_id}"
+    return pathlib.Path.cwd() / f"comfy-{version_id}"
+
+
+def _nodes_cache_root() -> pathlib.Path:
+    # Priority: env var > runpod conventional path > user cache dir
+    env_path = os.environ.get("COMFY_CACHE_NODES")
+    if env_path:
+        return pathlib.Path(env_path)
+    # User provided RunPod volume convention
+    rp_convention = pathlib.Path("/workspace/custom_nodes/workspace")
+    if rp_convention.exists():
+        return rp_convention
+    # Default to user cache dir
+    return pathlib.Path(os.path.expanduser("~/.comfy-cache/custom_nodes"))
+
+
+def _models_dir_default(comfy_home: pathlib.Path) -> pathlib.Path:
+    env_models = os.environ.get("MODELS_DIR")
+    if env_models:
+        return pathlib.Path(env_models)
+    # If /workspace/modes exists (per user convention), prefer it; otherwise use COMFY_HOME/models
+    wp_models = pathlib.Path("/workspace/models")
+    if wp_models.exists():
+        return wp_models
+    return comfy_home / "models"
+
+
+def _ensure_symlink(src: pathlib.Path, dst: pathlib.Path) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        if dst.is_symlink() or dst.exists():
+            try:
+                if dst.is_symlink() and dst.resolve() == src.resolve():
+                    return
+                dst.unlink()
+            except Exception:
+                pass
+        os.symlink(src, dst, target_is_directory=True)
+    except FileExistsError:
+        pass
+
+
+def resolve_version_spec(spec_path: pathlib.Path, offline: bool = False) -> Dict[str, object]:
+    """Load versions/<id>.json, resolve missing commits, and return resolved dict.
+
+    Expected spec fields (schema v2):
+      - version_id: str
+      - comfy: { repo: str, ref?: str, commit?: str }
+      - custom_nodes: [ { name?: str, repo: str, ref?: str, commit?: str } ]
+      - models: [ { source: str, name?: str, target_subdir?: str } ]
+      - env?: dict
+      - options?: { offline?: bool, skip_models?: bool }
+    """
+    spec = _read_json(spec_path)
+    version_id = str(spec.get("version_id") or spec.get("id") or "version").strip()
+    resolved: Dict[str, object] = {
+        "schema_version": 2,
+        "version_id": version_id,
+        "comfy": {},
+        "custom_nodes": [],
+        "models": spec.get("models", []),
+        "env": spec.get("env", {}),
+        "options": spec.get("options", {}),
+        "source_spec": str(spec_path),
+    }
+
+    # Comfy
+    comfy_in = spec.get("comfy") or spec.get("comfyui") or {}
+    if not isinstance(comfy_in, dict):
+        raise RuntimeError("Invalid spec.comfy, expected object")
+    repo = str(comfy_in.get("repo") or "").strip()
+    if not repo:
+        raise RuntimeError("spec.comfy.repo is required")
+    ref = str(comfy_in.get("ref") or "").strip() or None
+    commit = str(comfy_in.get("commit") or "").strip() or None
+    if not commit and not offline:
+        commit = _git_ls_remote(repo, ref)
+    resolved["comfy"] = {"repo": repo, "ref": ref, "commit": commit}
+
+    # Custom nodes
+    nodes_in = spec.get("custom_nodes") or []
+    if not isinstance(nodes_in, list):
+        raise RuntimeError("spec.custom_nodes must be a list")
+    out_nodes: List[Dict[str, Optional[str]]] = []
+    for n in nodes_in:
+        if not isinstance(n, dict):
+            continue
+        n_repo = str(n.get("repo") or "").strip()
+        n_ref = str(n.get("ref") or "").strip() or None
+        n_commit = str(n.get("commit") or "").strip() or None
+        n_name = str(n.get("name") or "").strip() or None
+        if n_repo and (not n_commit) and (not offline):
+            n_commit = _git_ls_remote(n_repo, n_ref)
+        out_nodes.append({"name": n_name, "repo": n_repo, "ref": n_ref, "commit": n_commit})
+    resolved["custom_nodes"] = out_nodes
+
+    return resolved
+
+
+def save_resolved_lock(resolved: Dict[str, object]) -> pathlib.Path:
+    version_id = str(resolved.get("version_id") or "version")
+    out_path = pathlib.Path(os.path.expanduser(f"~/.comfy-cache/resolved/{version_id}.lock.json"))
+    _safe_write_json(out_path, resolved)
+    log_info(f"Resolved-lock saved: {out_path}")
+    return out_path
+
+
+def realize_from_resolved(resolved: Dict[str, object], offline: bool = False) -> Tuple[pathlib.Path, pathlib.Path]:
+    """Create/prepare COMFY_HOME based on resolved spec. Returns (comfy_home, models_dir)."""
+    version_id = str(resolved.get("version_id") or "version")
+    comfy_home = _pick_default_comfy_home(version_id)
+    models_dir = _models_dir_default(comfy_home)
+
+    # Ensure base dirs
+    (comfy_home / "ComfyUI").mkdir(parents=True, exist_ok=True)
+    (comfy_home / "ComfyUI" / "custom_nodes").mkdir(parents=True, exist_ok=True)
+    models_dir.mkdir(parents=True, exist_ok=True)
+
+    # Clone or update ComfyUI
+    comfy = resolved.get("comfy") or {}
+    repo = comfy.get("repo") if isinstance(comfy, dict) else None
+    commit = comfy.get("commit") if isinstance(comfy, dict) else None
+    if not isinstance(repo, str) or not repo:
+        raise RuntimeError("Resolved comfy.repo is required")
+    repo_dir = comfy_home / "ComfyUI"
+    if not (repo_dir / ".git").exists():
+        code, out, err = run_command(["git", "clone", repo, str(repo_dir)])
+        if code != 0:
+            raise RuntimeError(f"Failed to clone ComfyUI: {err or out}")
+    if isinstance(commit, str) and commit:
+        run_command(["git", "-C", str(repo_dir), "fetch", "--all", "--tags", "-q"])  # best-effort
+        code, out, err = run_command(["git", "-C", str(repo_dir), "checkout", commit])
+        if code != 0:
+            log_warn(f"Failed to checkout commit {commit} for ComfyUI: {err or out}")
+
+    # Autoinstall ComfyUI requirements
+    py = _venv_python_from_env() or _select_python_executable()
+    req = repo_dir / "requirements.txt"
+    if req.exists() and not offline:
+        code, out, err = run_command([py, "-m", "pip", "install", "-r", str(req)])
+        if code != 0:
+            log_warn(f"pip install ComfyUI requirements failed: {err or out}")
+
+    # Custom nodes: clone to cache and symlink
+    cache_root = _nodes_cache_root()
+    cache_root.mkdir(parents=True, exist_ok=True)
+    nodes = resolved.get("custom_nodes") or []
+    if isinstance(nodes, list):
+        for n in nodes:
+            if not isinstance(n, dict):
+                continue
+            n_repo = str(n.get("repo") or "").strip()
+            n_commit = str(n.get("commit") or "").strip()
+            n_name = str(n.get("name") or "").strip() or _slug_from_repo(n_repo)
+            if not n_repo:
+                continue
+            cache_name = f"{_slug_from_repo(n_repo)}@{n_commit or 'latest'}"
+            cache_path = cache_root / cache_name
+            if not (cache_path / ".git").exists():
+                code, out, err = run_command(["git", "clone", n_repo, str(cache_path)])
+                if code != 0:
+                    log_warn(f"Failed to clone node {n_name}: {err or out}")
+                    continue
+            if n_commit:
+                run_command(["git", "-C", str(cache_path), "fetch", "--all", "--tags", "-q"])  # best-effort
+                run_command(["git", "-C", str(cache_path), "checkout", n_commit])
+            # Symlink into COMFY_HOME
+            dst = repo_dir / "custom_nodes" / n_name
+            _ensure_symlink(cache_path, dst)
+            # Optional: auto-install requirements for node
+            if not offline:
+                node_req = cache_path / "requirements.txt"
+                node_proj = cache_path / "pyproject.toml"
+                if node_req.exists():
+                    code, out, err = run_command([py, "-m", "pip", "install", "-r", str(node_req)])
+                    if code != 0:
+                        log_warn(f"pip install for node {n_name} failed: {err or out}")
+                elif node_proj.exists():
+                    code, out, err = run_command([py, "-m", "pip", "install", str(cache_path)])
+                    if code != 0:
+                        log_warn(f"pip install (pyproject) for node {n_name} failed: {err or out}")
+
+    # Export env
+    os.environ["COMFY_HOME"] = str(comfy_home)
+    os.environ["MODELS_DIR"] = str(models_dir)
+    return comfy_home, models_dir
+
+
 # ---------------------------- helpers: interpreter ---------------------------- #
 
 def _venv_python_path(venv_dir: pathlib.Path) -> pathlib.Path:

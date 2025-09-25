@@ -12,8 +12,7 @@
 
 -   `COMFY_HOME` — базовая директория установки ComfyUI (локально или путь volume на RunPod).
 -   `MODELS_DIR` — базовая директория моделей (по умолчанию `$COMFY_HOME/models`).
--   `COMFY_VERSION_NAME` — удобное имя версии (используется для поиска lock-файла).
--   `LOCK_PATH` — явный путь к lock-файлу (перебивает `COMFY_VERSION_NAME`).
+-   `COMFY_VERSION_NAME` — удобное имя версии (используется для поиска `versions/<id>.json`).
 -   `OUTPUT_MODE` — режим вывода результата: `gcs` (по умолчанию) или `base64`.
 -   `GCS_BUCKET` — имя bucket для загрузки результатов (используется по умолчанию).
 -   `GOOGLE_APPLICATION_CREDENTIALS` — путь к JSON ключу сервисного аккаунта (обязателен для GCS).
@@ -260,31 +259,9 @@ python3 scripts/pin_requirements.py \
 
 Во время применения lock-файла `resolver` установит пакеты точно по URL, обеспечивая воспроизводимость для нужного CUDA/CPU профиля.
 
-### Клонирование версии
+### Клонирование версии (устарело)
 
-Развернуть окружение по lock-файлу в новую директорию:
-
-```bash
-./scripts/clone_version.sh --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json \
-  --target "$HOME/comfy-$COMFY_VERSION_NAME"
-```
-
-Опции:
-
--   `--python PYTHON` — базовый Python для утилит на этапе клонирования.
--   `--skip-models` — пропустить проверку/скачивание моделей.
--   `--offline` — установка зависимостей без индексов (только локальные колёса/кэш pip).
--   `--wheels-dir DIR` — директория с wheel-артефактами (для `--offline`).
--   `--pip-extra-args "..."` — дополнительные аргументы для `pip install`.
-
-Пример оффлайн-клона:
-
-```bash
-./scripts/clone_version.sh \
-  --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json \
-  --target /runpod-volume/comfy \
-  --offline --wheels-dir /wheels
-```
+Ранее использовался `clone_version.sh` на основе lock-файла. В новой схеме используйте `realize_version.py` с `--version-id/--spec`.
 
 ### Реализация версии из JSON (versions/\*.json)
 
@@ -302,7 +279,7 @@ python3 scripts/realize_version.py --version-id "$COMFY_VERSION_NAME" --offline 
 ```
 
 По умолчанию создаётся отдельный каталог `COMFY_HOME` со своим `.venv`,
-кастом‑ноды клонируются по коммитам из lock, модели проверяются/докачиваются в `$COMFY_HOME/models`.
+кастом‑ноды клонируются в кеш и линкуются по коммитам, модели проверяются/докачиваются в единый `MODELS_DIR`.
 
 ### Удаление версии
 
@@ -336,14 +313,14 @@ docker run --rm \
   runpod-comfy:local --help | cat
 ```
 
-Запуск с lock и workflow:
+Запуск с версией и workflow:
 
 ```bash
 docker run --rm \
   -e COMFY_VERSION_NAME="$COMFY_VERSION_NAME" \
   -e OUTPUT_MODE=gcs \
   runpod-comfy:local \
-  --lock /app/lockfiles/comfy-$COMFY_VERSION_NAME.lock.json \
+  --version-id "$COMFY_VERSION_NAME" \
   --workflow /app/workflows/example.json \
   --output gcs | cat
 ```
@@ -354,7 +331,7 @@ Handler теперь поддерживает реальное выполнен�
 
 ```bash
 ./scripts/run_handler_local.sh \
-  --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json \
+  --version-id "$COMFY_VERSION_NAME" \
   --workflow ./workflows/example.json \
   --output base64
 ```
@@ -368,7 +345,7 @@ Handler теперь поддерживает реальное выполнен�
 
 ```bash
 ./scripts/run_handler_local.sh \
-  --lock lockfiles/comfy-comfytest.lock.json \
+  --version-id comfy-comfytest \
   --workflow ./workflows/minimal.json \
   --models-dir "$COMFY_HOME/models" \
   --output base64
@@ -430,7 +407,7 @@ python3 scripts/repro_workflow_hash.py \
     ```bash
     echo '{}' > workflows/minimal.json
     python -m rp_handler.main \
-      --lock "lockfiles/comfy-${COMFY_VERSION_NAME}.lock.json" \
+      --version-id "${COMFY_VERSION_NAME}" \
       --workflow /app/workflows/minimal.json \
       --output base64 | head -c 80; echo
     ```
@@ -439,7 +416,7 @@ python3 scripts/repro_workflow_hash.py \
 
     ```bash
     python -m rp_handler.main \
-      --lock "lockfiles/comfy-${COMFY_VERSION_NAME}.lock.json" \
+      --version-id "${COMFY_VERSION_NAME}" \
       --workflow workflows/minimal.json \
       --output gcs | cat
     ```

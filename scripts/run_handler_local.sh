@@ -10,21 +10,23 @@ if [ -f "$SCRIPT_DIR/lib/common.sh" ]; then . "$SCRIPT_DIR/lib/common.sh"; fi
 
 usage() {
   cat <<'EOF'
-Локальный запуск handler (без Docker): применить lock, проверить модели и вывести результат.
+Локальный запуск handler (без Docker): резолв/реалайз версии и запуск workflow.
 
 Usage:
-  scripts/run_handler_local.sh --lock PATH --workflow PATH [--output base64|gcs] [--out-file PATH]
+  scripts/run_handler_local.sh (--version-id ID | --spec PATH) --workflow PATH [--output base64|gcs] [--out-file PATH]
 EOF
 }
 
-LOCK=""
+VERSION_ID=""
+SPEC=""
 WORKFLOW=""
 OUTPUT=""
 OUT_FILE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --lock) LOCK="$2"; shift 2;;
+    --version-id) VERSION_ID="$2"; shift 2;;
+    --spec) SPEC="$2"; shift 2;;
     --workflow) WORKFLOW="$2"; shift 2;;
     --output) OUTPUT="$2"; shift 2;;
     --out-file) OUT_FILE="$2"; shift 2;;
@@ -33,15 +35,20 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [ -z "$LOCK" ]; then echo "--lock required" >&2; exit 1; fi
 if [ -z "$WORKFLOW" ]; then echo "--workflow required" >&2; exit 1; fi
+if [ -z "$VERSION_ID" ] && [ -z "$SPEC" ]; then echo "--version-id or --spec required" >&2; exit 1; fi
 
 cd "$ROOT_DIR"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 # Build command arguments
 ARGS=()
-ARGS+=(--lock "$LOCK")
+if [ -n "$VERSION_ID" ]; then
+  ARGS+=(--version-id "$VERSION_ID")
+fi
+if [ -n "$SPEC" ]; then
+  ARGS+=(--spec "$SPEC")
+fi
 ARGS+=(--workflow "$WORKFLOW")
 if [ -n "$OUTPUT" ]; then
   ARGS+=(--output "$OUTPUT")

@@ -1,3 +1,95 @@
+## План переделки под единую спецификацию версий (versions/\*.json)
+
+Цель: описывать версии только в `versions/*.json` и запускать по `--version-id`, без `lockfiles/*`. Компоненты не дублируются: модели всегда из одного места (`MODELS_DIR`/extra_model_paths), кастом‑ноды линкуются из кеша `<repo>@<commit>`. Handler сам резолвит и разворачивает окружение максимально быстро.
+
+### 0. База и договорённости (согласно `docs/qa.md`) — выполнено
+
+-   schema_version в `versions/*.json` — введён (`schema_version: 2`), пример обновлён (`versions/test-ver.json`)
+-   Пиннинг: `repo` + опциональный `ref`; `commit` резолвится при первом запуске (`rp_handler.resolver.resolve_version_spec`)
+-   Resolved‑lock сохраняем в `~/.comfy-cache/resolved/<version_id>.lock.json` (`save_resolved_lock`)
+-   Модели: checksum не обязателен; ключ — URL; «одно место» через `MODELS_DIR`/`extra_model_paths` (дефолт `$COMFY_HOME/models`)
+-   Кастом‑ноды: «чистые» коммиты; кеш `<repo>@<commit>`; в версию — symlink (кеш по умолчанию: `/workspace/custom_nodes/workspace` или `~/.comfy-cache/custom_nodes`)
+-   Offline: допускаем частичные загрузки; symlink разрешены (при offline отсутствующие модели — warn)
+-   Обратную совместимость с `--lock` — убрана из handler/скриптов; интерфейс теперь `--version-id/--spec`
+
+### 1. Схема и валидация спецификации версий
+
+1.1 Ввести схему (schema_version=2):
+
+-   `version_id`, `comfy: {repo, ref?, commit?}`
+-   `custom_nodes: [{repo, ref?, commit?, name?}]`
+-   `models: [{source, name?, target_subdir?}]`
+-   `env?`, `options?: {offline?, skip_models?}`
+    1.2 Реализовать валидацию схемы и понятные ошибки
+    1.3 Обновить документацию и примеры
+
+### 2. Резолвер refs→commits и resolved‑lock
+
+2.1 Реализовать резолвинг `comfy` и `custom_nodes`
+2.2 Сохранять результат в `~/.comfy-cache/resolved/<version_id>.lock.json`
+2.3 Идемпотентность при повторном запуске
+2.4 Поддержать `--dry-run` (печать плана)
+
+### 3. Развёртывание версии (realize)
+
+3.1 `realize_version.py`: принимать новую спецификацию (`--version-id/--spec`), без `lock`
+3.2 `COMFY_HOME=/runpod-volume/comfy-<version_id>`, отдельный `.venv`
+3.3 Автосбор зависимостей нод (requirements/pyproject) + поддержка wheels (`--find-links /wheels`)
+3.4 Кастом‑ноды: клон в кеш `<repo>@<commit>`, symlink в `COMFY_HOME/custom_nodes/<name>`
+3.5 Модели: загрузка в общий `MODELS_DIR` (если файла нет); без checksum; не дублировать
+3.6 Генерация/подключение `extra_model_paths.yaml` при необходимости
+3.7 `--offline`: использовать доступное; недостающее — предупреждать, не падать
+
+### 4. Handler
+
+4.1 Изменить интерфейс: `--version-id` и `--workflow` (убрать `--lock`)
+4.2 Внутри: резолв → реалайз → запуск воркфлоу; быстрый повторный старт
+4.3 Переменные вывода (GCS и т.п.) без изменений
+
+### 5. CLI верхнего уровня
+
+5.1 Добавить `scripts/version.py`:
+
+-   `resolve <id>` — создать/обновить resolved‑lock
+-   `realize <id>` — развернуть окружение
+-   `test <id> --workflow <file>` — smoke‑тест
+    5.2 Обновить `scripts/run_handler_local.sh` на `--version-id`
+
+### 6. Документация
+
+6.1 Обновить cheatsheets (`README.md`, `create_version.md`, `realize_version.md`, `runpod_local.md`) под новую схему
+6.2 Удалить/архивировать разделы про `lockfiles`; убрать упоминания `--lock`
+6.3 Добавить раздел про `MODELS_DIR` и `extra_model_paths.yaml`
+
+### 7. Миграция и чистка
+
+7.1 Привести существующие `versions/*.json` к новой схеме
+7.2 Удалить легаси‑флаги/код (`--lock` и связанные пути)
+7.3 Опционально: однократная утилита миграции из старых lock → spec
+
+### 8. Критерии приёмки
+
+-   `handler run --version-id <id> --workflow <wf>` перезапускается без повторной скачки/клонирования
+-   Модели используются из одного места (`MODELS_DIR`), без дублирования
+-   Кастом‑ноды из кеша `<repo>@<commit>` линкуются в версию
+-   `--dry-run` печатает полный план действий
+-   Offline допускает частичный запуск
+
+### 9. Риски и решения
+
+-   Неодинаковые пути моделей — стандартизовать через `MODELS_DIR` и/или `extra_model_paths.yaml`
+-   Конфликты нод — изоляция по `<repo>@<commit>`
+-   Долгий первый резолв — кешировать результат и wheels
+
+### 10. Этапность
+
+-   Этап 1: схема + резолвер + realize (локально)
+-   Этап 2: handler и `run_handler_local.sh`
+-   Этап 3: документация и чистка легаси
+-   Этап 4: UX‑CLI `scripts/version.py` и smoke‑test
+
+---
+
 ## План работ и тестирования
 
 Ниже — практический пошаговый план. После каждого шага предусмотрена локальная проверка (macOS / Docker).

@@ -51,7 +51,7 @@
     при вычислении `checksum` локально производится экспансия переменных окружения.
 
 -   Handler:
-    -   Принимает: путь/описание воркфлоу, имя версии/lock-файл, параметры вывода.
+    -   Принимает: путь/описание воркфлоу и `--version-id/--spec` (без lock-файла), параметры вывода.
     -   Возвращает: base64-результат или ссылку в GCS.
     -   Встраивается в Docker и может работать локально.
 
@@ -111,6 +111,6 @@
 -   Детальный гид: см. `docs/runpod.md`.
 -   Дефолтные пути внутри образа: `COMFY_HOME=/opt/comfy`, `MODELS_DIR=/opt/comfy/models`.
 -   Для Pods рекомендуется переопределять на volume: `/runpod-volume/comfy`.
--   Точка входа: `docker/entrypoint.sh` → `python -m rp_handler.main`.
--   Параметры handler: `--lock`, `--workflow`, `--output {base64|gcs}` (по умолчанию `gcs`), `--gcs-bucket`, `--gcs-prefix`, `--models-dir`, `--verbose`.
+    -   Точка входа: `docker/entrypoint.sh` → `python -m rp_handler.main`.
+    -   Параметры handler: `--version-id|--spec`, `--workflow`, `--output {base64|gcs}` (по умолчанию `gcs`), `--gcs-bucket`, `--gcs-prefix`, `--models-dir`, `--verbose`.
 -   GCS переменные: `GCS_BUCKET`, `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`/`GCS_PROJECT`, `GCS_PREFIX`, `GCS_RETRIES`, `GCS_RETRY_BASE_SLEEP`, `GCS_PUBLIC`, `GCS_SIGNED_URL_TTL`, `GCS_VALIDATE`.

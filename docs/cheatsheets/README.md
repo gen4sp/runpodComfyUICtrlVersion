@@ -60,7 +60,7 @@ export COMFY_HOME="/runpod-volume/comfy"
 export COMFY_VERSION_NAME="my-version"
 
 # Запуск handler
-./scripts/run_handler_local.sh --lock lockfiles/comfy-my-version.lock.json --workflow workflows/minimal.json --output base64
+./scripts/run_handler_local.sh --version-id my-version --workflow workflows/minimal.json --output base64
 ```
 
 ### Ручная настройка версии

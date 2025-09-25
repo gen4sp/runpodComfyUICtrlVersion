@@ -18,8 +18,7 @@
 
 -   `COMFY_HOME` (по умолчанию `/opt/comfy`) — корень окружения версии.
 -   `MODELS_DIR` (по умолчанию `$COMFY_HOME/models`) — каталог моделей.
--   `COMFY_VERSION_NAME` — имя версии; по нему в образе ищется lock-файл: `/app/lockfiles/comfy-<name>.lock.json`.
--   `LOCK_PATH` — явный путь к lock-файлу (перебивает `COMFY_VERSION_NAME`).
+-   `COMFY_VERSION_NAME` — имя версии; по нему ищется спека `versions/<id>.json`.
 -   `OUTPUT_MODE` — `gcs` (по умолчанию) или `base64`.
 -   GCS: `GCS_BUCKET` (обязателен для `gcs`), `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`/`GCS_PROJECT`,
     `GCS_PREFIX` (по умолчанию `comfy/outputs`), `GCS_RETRIES` (3), `GCS_RETRY_BASE_SLEEP` (0.5), `GCS_PUBLIC` (false), `GCS_SIGNED_URL_TTL` (0), `GCS_VALIDATE` (true).
@@ -53,7 +52,7 @@ ls -ld /runpod-volume
 mkdir -p /runpod-volume/comfy/models
 ```
 
-4. Размещение lock-файла: либо включите его в образ (копируется в `/app/lockfiles` при сборке), либо задайте явный путь через `LOCK_PATH`.
+4. Размещение спеки версии: включите `versions/<id>.json` в образ или смонтируйте её.
    Для автоматической развёртки окружения на volume используйте `realize_version.py`:
 
 ```bash
@@ -68,7 +67,7 @@ python3 /app/scripts/realize_version.py --spec /app/versions/$COMFY_VERSION_NAME
 ```bash
 echo '{}' > /app/workflows/minimal.json
 python -m rp_handler.main \
-  --lock "/app/lockfiles/comfy-${COMFY_VERSION_NAME}.lock.json" \
+  --version-id "${COMFY_VERSION_NAME}" \
   --workflow /app/workflows/minimal.json \
   --output base64 | head -c 80; echo
 # Ожидается base64-строка (контент заглушки/воркфлоу).
