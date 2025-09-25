@@ -5,3 +5,4 @@ piexif
 segment_anything
 sageattention
 onnx
+jq
