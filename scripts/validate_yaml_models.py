@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import hashlib
+import json
 import os
 import pathlib
 import shutil
@@ -263,6 +264,29 @@ def _parse_int_env(names: List[str]) -> Optional[int]:
     return None
 
 
+def get_runpod_volumes_total_gb() -> Optional[int]:
+    """Get total GB from RunPod API network volumes."""
+    token = os.environ.get("RP_TOKEN_READONLY")
+    if not token:
+        return None
+
+    try:
+        url = "https://rest.runpod.io/v1/networkvolumes"
+        headers = {"Authorization": f"Bearer {token}"}
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+
+        volumes = response.json()
+        if not volumes or not isinstance(volumes, list):
+            return None
+
+        total_gb = sum(volume.get("size", 0) for volume in volumes if isinstance(volume, dict))
+        return total_gb if total_gb > 0 else None
+
+    except Exception:
+        return None
+
+
 def get_runpod_quota_bytes() -> Optional[int]:
     """Return declared RunPod volume quota in bytes if provided via env.
 
@@ -288,7 +312,7 @@ def get_runpod_quota_bytes() -> Optional[int]:
     if gb_val is not None and gb_val > 0:
         return int(gb_val * 1024 * 1024 * 1024)
 
-    # Default 150 GiB if running under a known RunPod-like mount and no envs set
+    # Default from RunPod API or 200 GiB if running under a known RunPod-like mount and no envs set
     try:
         root = os.environ.get("RUNPOD_VOLUME_ROOT") or ("/runpod-volume" if os.path.exists("/runpod-volume") else ("/workspace" if os.path.exists("/workspace") else None))
         if root:
@@ -297,7 +321,9 @@ def get_runpod_quota_bytes() -> Optional[int]:
                 "RUNPOD_DEFAULT_QUOTA_GB",
             ])
             if default_gb is None:
-                default_gb = 150
+                default_gb = get_runpod_volumes_total_gb()
+            if default_gb is None:
+                default_gb = 200
             return int(default_gb * 1024 * 1024 * 1024)
     except Exception:
         pass
