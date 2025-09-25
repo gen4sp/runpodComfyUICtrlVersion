@@ -236,7 +236,7 @@ export COMFY_LOG_LEVEL="DEBUG"
 
 # Запуск с логированием в файл
 cd /runpod-volume/comfy
-source .venv/bin/activate
+source /workspace/ComfyUI/.venv/bin/activate
 python ComfyUI/main.py --listen 0.0.0.0 --port 8188 2>&1 | tee comfy-debug.log
 
 # Просмотр логов в реальном времени
