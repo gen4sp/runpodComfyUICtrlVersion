@@ -1,15 +1,14 @@
-# Реализация версии из JSON (versions/\*.json)
+# Реализация версии (versions/\*)
 
-## Назначение
+Скрипт `scripts/realize_version.py` разворачивает версию ComfyUI по спецификации `schema_version: 2` из `versions/<id>.json`:
 
-Скрипт `scripts/realize_version.py` развертывает конкретную версию ComfyUI по декларативной JSON‑спецификации в `versions/<id>.json`:
-
--   создаёт изолированный `COMFY_HOME` с отдельным `.venv`
--   клонирует `ComfyUI` и кастом‑ноды по зафиксированным `commit SHA`
--   устанавливает зависимости и кастом‑ноды по `resolved-lock`
+-   резолвит ветки/теги в коммиты и сохраняет `~/.comfy-cache/resolved/<version_id>.lock.json`
+-   готовит изолированный `COMFY_HOME` с отдельным `.venv`
+-   клонирует ядро и кастом-ноды из кеша/репозиториев, создаёт symlink'и
 -   проверяет и докачивает модели в единый `MODELS_DIR`
+-   поддерживает `--dry-run`
 
-Подходит для локальной разработки, Pods на RunPod (volume) и CI.
+Сценарий одинаков для локальной разработки, RunPod volume и CI.
 
 ## Формат JSON‑спеки
 
@@ -19,21 +18,39 @@
     "version_id": "wan22-fast",
     "comfy": {
         "repo": "https://github.com/comfyanonymous/ComfyUI",
-        "ref": "master"
+        "ref": "master",
+        "commit": "<опционально>"
     },
     "custom_nodes": [
-        { "repo": "https://github.com/city96/ComfyUI-GGUF", "name": "gguf" }
+        {
+            "repo": "https://github.com/city96/ComfyUI-GGUF",
+            "name": "gguf",
+            "commit": "<опционально>"
+        }
     ],
-    "models": [{ "source": "hf://...", "target_subdir": "unet" }],
-    "env": {},
-    "options": { "offline": false, "skip_models": false }
+    "models": [
+        {
+            "source": "hf://...",
+            "name": "wan22-unet",
+            "target_subdir": "unet"
+        }
+    ],
+    "env": {
+        "HF_TOKEN": "${HF_TOKEN}"
+    },
+    "options": {
+        "offline": false,
+        "skip_models": false
+    }
 }
 ```
 
--   `version_id`: идентификатор версии (имя для директории по умолчанию)
--   `lock`: путь к lock‑файлу с pinned зависимостями, узлами и моделями
--   `target`: куда развернуть окружение (иначе выбирается автоматически)
--   `options`: необязательные параметры клонирования/установки
+-   `version_id` — имя версии (используется для директорий и resolved-lock)
+-   `comfy` — репозиторий ядра, опциональные `ref`/`commit`
+-   `custom_nodes` — список узлов (`repo`, опциональные `ref`/`commit`/`name`)
+-   `models` — источники моделей (минимум `source`, опционально `name`, `target_subdir`)
+-   `env` — дополнительные переменные окружения
+-   `options` — дефолтные флаги (`offline`, `skip_models`)
 
 ## Команды
 
@@ -57,16 +74,25 @@ python3 scripts/realize_version.py \
   --target /runpod-volume/comfy-wan22-fast
 ```
 
-### Оффлайн режим (локальные wheels)
-
-```bash
-python3 scripts/realize_version.py --version-id wan22-fast --offline --wheels-dir /wheels
-```
-
-### Dry‑run (только показать действия)
+### Dry-run (только показать действия)
 
 ```bash
 python3 scripts/realize_version.py --version-id wan22-fast --dry-run
+```
+
+### Оффлайн режим (без git/pip)
+
+```bash
+python3 scripts/realize_version.py --version-id wan22-fast --offline
+```
+
+### Пользовательский `COMFY_HOME` и MODELS_DIR
+
+```bash
+python3 scripts/realize_version.py \
+  --version-id wan22-fast \
+  --target /runpod-volume/comfy-wan22-fast \
+  --models-dir /workspace/models
 ```
 
 ## Примечания

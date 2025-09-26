@@ -11,7 +11,10 @@ def test_main_base64_to_stdout(tmp_path, capsys, monkeypatch):
     spec.write_text(json.dumps({
         "schema_version": 2,
         "version_id": "test",
-        "comfy": {"repo": "https://github.com/comfyanonymous/ComfyUI"},
+        "comfy": {
+            "repo": "https://github.com/comfyanonymous/ComfyUI",
+            "commit": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+        },
         "custom_nodes": [],
         "models": []
     }), encoding="utf-8")
@@ -22,11 +25,16 @@ def test_main_base64_to_stdout(tmp_path, capsys, monkeypatch):
     monkeypatch.setattr(handler_main, "resolve_version_spec", lambda p, offline=False: {
         "schema_version": 2,
         "version_id": "test",
-        "comfy": {"repo": "https://github.com/comfyanonymous/ComfyUI", "commit": None},
+        "comfy": {
+            "repo": "https://github.com/comfyanonymous/ComfyUI",
+            "commit": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+        },
         "custom_nodes": [],
-        "models": []
+        "models": [],
+        "options": {}
     })
     monkeypatch.setattr(handler_main, "save_resolved_lock", lambda resolved: spec)  # type: ignore[misc]
+
     def fake_realize(resolved, offline=False):  # type: ignore[no-untyped-def]
         ch = tmp_path / "comfy"
         md = ch / "models"
@@ -54,7 +62,10 @@ def test_main_gcs_invokes_emit(monkeypatch, tmp_path):
     spec.write_text(json.dumps({
         "schema_version": 2,
         "version_id": "test",
-        "comfy": {"repo": "https://github.com/comfyanonymous/ComfyUI"}
+        "comfy": {
+            "repo": "https://github.com/comfyanonymous/ComfyUI",
+            "commit": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+        }
     }), encoding="utf-8")
 
     called = {"kwargs": None}
@@ -72,9 +83,13 @@ def test_main_gcs_invokes_emit(monkeypatch, tmp_path):
     monkeypatch.setattr(handler_main, "resolve_version_spec", lambda p, offline=False: {
         "schema_version": 2,
         "version_id": "test",
-        "comfy": {"repo": "https://github.com/comfyanonymous/ComfyUI", "commit": None},
+        "comfy": {
+            "repo": "https://github.com/comfyanonymous/ComfyUI",
+            "commit": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+        },
         "custom_nodes": [],
-        "models": []
+        "models": [],
+        "options": {}
     })
     monkeypatch.setattr(handler_main, "save_resolved_lock", lambda resolved: spec)  # type: ignore[misc]
     def fake_realize(resolved, offline=False):  # type: ignore[no-untyped-def]

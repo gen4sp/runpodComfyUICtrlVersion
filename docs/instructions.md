@@ -263,23 +263,29 @@ python3 scripts/pin_requirements.py \
 
 Ранее использовался `clone_version.sh` на основе lock-файла. В новой схеме используйте `realize_version.py` с `--version-id/--spec`.
 
-### Реализация версии из JSON (versions/\*.json)
-
-Развернуть окружение по декларативной спека‑версии:
+### Реализация версии (schema_v2)
 
 ```bash
-# По id (ищет versions/<id>.json)
+# По id (берёт versions/<id>.json)
 python3 scripts/realize_version.py --version-id "$COMFY_VERSION_NAME"
 
-# Явный путь к файлу спеки
+# Явный путь к JSON
 python3 scripts/realize_version.py --spec versions/$COMFY_VERSION_NAME.json
 
-# Оффлайн с локальными wheels
-python3 scripts/realize_version.py --version-id "$COMFY_VERSION_NAME" --offline --wheels-dir /wheels
+# dry-run: только показать план
+python3 scripts/realize_version.py --version-id "$COMFY_VERSION_NAME" --dry-run
+
+# оффлайн (без git/pip операций)
+python3 scripts/realize_version.py --version-id "$COMFY_VERSION_NAME" --offline
+
+# собственные пути
+python3 scripts/realize_version.py \
+  --version-id "$COMFY_VERSION_NAME" \
+  --target /runpod-volume/comfy-$COMFY_VERSION_NAME \
+  --models-dir /workspace/models
 ```
 
-По умолчанию создаётся отдельный каталог `COMFY_HOME` со своим `.venv`,
-кастом‑ноды клонируются в кеш и линкуются по коммитам, модели проверяются/докачиваются в единый `MODELS_DIR`.
+Результат: создаётся кеш `~/.comfy-cache/resolved/<version_id>.lock.json`, готовится `COMFY_HOME` с `.venv`, ядро и кастом-ноды чек-аутятся по коммитам, модели подтягиваются в единый `MODELS_DIR` (можно переопределить флагом). Команда `--dry-run` печатает план и завершает работу без изменений.
 
 ### Удаление версии
 

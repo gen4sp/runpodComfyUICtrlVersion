@@ -8,10 +8,18 @@ import shutil
 import sys
 from typing import Dict, List, Optional, Tuple
 
-from .utils import log_info, log_warn, log_error, run_command, expand_env_vars, validate_required_path
+from .utils import log_info, log_warn, log_error, run_command, expand_env_vars
 
 
 # Функция expand_env удалена, используется expand_env_vars из utils
+
+class SpecValidationError(Exception):
+    """Проблема с валидацией versions/*.json."""
+
+
+def expand_env(path: str, extra_env: Optional[Dict[str, str]] = None) -> str:
+    """Совместимость с тестами: прокси для expand_env_vars."""
+    return expand_env_vars(path, extra_env)
 
 
 def derive_env(models_dir: Optional[str]) -> Dict[str, str]:
@@ -270,8 +278,9 @@ def resolve_version_spec(spec_path: pathlib.Path, offline: bool = False) -> Dict
       - env?: dict
       - options?: { offline?: bool, skip_models?: bool }
     """
-    spec = _read_json(spec_path)
-    version_id = str(spec.get("version_id") or spec.get("id") or "version").strip()
+    spec_raw = _read_json(spec_path)
+    spec = validate_version_spec(spec_raw, spec_path)
+    version_id = spec["version_id"]
     resolved: Dict[str, object] = {
         "schema_version": 2,
         "version_id": version_id,
@@ -279,37 +288,55 @@ def resolve_version_spec(spec_path: pathlib.Path, offline: bool = False) -> Dict
         "custom_nodes": [],
         "models": spec.get("models", []),
         "env": spec.get("env", {}),
-        "options": spec.get("options", {}),
+        "options": {},
         "source_spec": str(spec_path),
     }
 
+    # Options: объединяем CLI/offline параметр и spec.options
+    spec_options = spec.get("options", {})
+    effective_offline = bool(offline or spec_options.get("offline", False))
+    effective_skip_models = bool(spec_options.get("skip_models", False))
+    resolved["options"] = {
+        "offline": effective_offline,
+        "skip_models": effective_skip_models,
+    }
+
     # Comfy
-    comfy_in = spec.get("comfy") or spec.get("comfyui") or {}
-    if not isinstance(comfy_in, dict):
-        raise RuntimeError("Invalid spec.comfy, expected object")
-    repo = str(comfy_in.get("repo") or "").strip()
-    if not repo:
-        raise RuntimeError("spec.comfy.repo is required")
-    ref = str(comfy_in.get("ref") or "").strip() or None
-    commit = str(comfy_in.get("commit") or "").strip() or None
-    if not commit and not offline:
-        commit = _git_ls_remote(repo, ref)
+    comfy_in = spec.get("comfy", {})
+    repo = comfy_in["repo"]
+    ref = comfy_in.get("ref")
+    commit = comfy_in.get("commit")
+    if not commit:
+        if effective_offline:
+            log_warn(
+                "Offline режим: commit для ComfyUI не указан в спецификации — используем текущее состояние"
+            )
+        else:
+            commit = _git_ls_remote(repo, ref)
+            if not commit:
+                raise RuntimeError(
+                    f"Не удалось резолвить commit для ComfyUI ({repo} {ref or 'HEAD'})"
+                )
     resolved["comfy"] = {"repo": repo, "ref": ref, "commit": commit}
 
     # Custom nodes
-    nodes_in = spec.get("custom_nodes") or []
-    if not isinstance(nodes_in, list):
-        raise RuntimeError("spec.custom_nodes must be a list")
     out_nodes: List[Dict[str, Optional[str]]] = []
-    for n in nodes_in:
-        if not isinstance(n, dict):
-            continue
-        n_repo = str(n.get("repo") or "").strip()
-        n_ref = str(n.get("ref") or "").strip() or None
-        n_commit = str(n.get("commit") or "").strip() or None
-        n_name = str(n.get("name") or "").strip() or None
-        if n_repo and (not n_commit) and (not offline):
-            n_commit = _git_ls_remote(n_repo, n_ref)
+    for n in spec.get("custom_nodes", []):
+        n_repo = n["repo"]
+        n_ref = n.get("ref")
+        n_commit = n.get("commit")
+        n_name = n.get("name") or _slug_from_repo(n_repo)
+        if not n_commit:
+            if effective_offline:
+                log_warn(
+                    f"Offline режим: commit не указан для кастом-ноды {n_repo} — пропускаем резолвинг"
+                )
+            else:
+                n_commit = _git_ls_remote(n_repo, n_ref)
+                if not n_commit:
+                    raise RuntimeError(
+                        f"Не удалось резолвить commit для кастом-ноды ({n_repo} {n_ref or 'HEAD'})"
+                    )
         out_nodes.append({"name": n_name, "repo": n_repo, "ref": n_ref, "commit": n_commit})
     resolved["custom_nodes"] = out_nodes
 
@@ -324,7 +351,9 @@ def save_resolved_lock(resolved: Dict[str, object]) -> pathlib.Path:
     return out_path
 
 
-def realize_from_resolved(resolved: Dict[str, object], offline: bool = False) -> Tuple[pathlib.Path, pathlib.Path]:
+def realize_from_resolved(
+    resolved: Dict[str, object], offline: bool = False
+) -> Tuple[pathlib.Path, pathlib.Path]:
     """Create/prepare COMFY_HOME based on resolved spec. Returns (comfy_home, models_dir)."""
     version_id = str(resolved.get("version_id") or "version")
     comfy_home = _pick_default_comfy_home(version_id)
@@ -343,11 +372,16 @@ def realize_from_resolved(resolved: Dict[str, object], offline: bool = False) ->
         raise RuntimeError("Resolved comfy.repo is required")
     repo_dir = comfy_home / "ComfyUI"
     if not (repo_dir / ".git").exists():
+        if offline:
+            raise RuntimeError(
+                f"Offline режим: репозиторий ComfyUI отсутствует по пути {repo_dir}"
+            )
         code, out, err = run_command(["git", "clone", repo, str(repo_dir)])
         if code != 0:
             raise RuntimeError(f"Failed to clone ComfyUI: {err or out}")
     if isinstance(commit, str) and commit:
-        run_command(["git", "-C", str(repo_dir), "fetch", "--all", "--tags", "-q"])  # best-effort
+        if not offline:
+            run_command(["git", "-C", str(repo_dir), "fetch", "--all", "--tags", "-q"])  # best-effort
         code, out, err = run_command(["git", "-C", str(repo_dir), "checkout", commit])
         if code != 0:
             log_warn(f"Failed to checkout commit {commit} for ComfyUI: {err or out}")
@@ -376,12 +410,18 @@ def realize_from_resolved(resolved: Dict[str, object], offline: bool = False) ->
             cache_name = f"{_slug_from_repo(n_repo)}@{n_commit or 'latest'}"
             cache_path = cache_root / cache_name
             if not (cache_path / ".git").exists():
+                if offline:
+                    log_warn(
+                        f"Offline режим: кэш для ноды {n_repo} не найден ({cache_path}), пропускаем"
+                    )
+                    continue
                 code, out, err = run_command(["git", "clone", n_repo, str(cache_path)])
                 if code != 0:
                     log_warn(f"Failed to clone node {n_name}: {err or out}")
                     continue
             if n_commit:
-                run_command(["git", "-C", str(cache_path), "fetch", "--all", "--tags", "-q"])  # best-effort
+                if not offline:
+                    run_command(["git", "-C", str(cache_path), "fetch", "--all", "--tags", "-q"])  # best-effort
                 run_command(["git", "-C", str(cache_path), "checkout", n_commit])
             # Symlink into COMFY_HOME
             dst = repo_dir / "custom_nodes" / n_name
@@ -403,6 +443,144 @@ def realize_from_resolved(resolved: Dict[str, object], offline: bool = False) ->
     os.environ["COMFY_HOME"] = str(comfy_home)
     os.environ["MODELS_DIR"] = str(models_dir)
     return comfy_home, models_dir
+
+
+def validate_version_spec(raw_spec: object, source_path: pathlib.Path) -> Dict[str, object]:
+    """Проверить структуру versions/*.json и вернуть нормализованные данные."""
+
+    if not isinstance(raw_spec, dict):
+        raise SpecValidationError(f"{source_path}: ожидался объект JSON с полями спецификации")
+
+    schema_version = raw_spec.get("schema_version")
+    if schema_version != 2:
+        raise SpecValidationError(
+            f"{source_path}: поддерживается только schema_version=2 (получено: {schema_version!r})"
+        )
+
+    version_id_raw = raw_spec.get("version_id") or raw_spec.get("id")
+    if not isinstance(version_id_raw, str) or not version_id_raw.strip():
+        raise SpecValidationError(f"{source_path}: поле 'version_id' обязательно и должно быть строкой")
+    version_id = version_id_raw.strip()
+
+    comfy_raw = raw_spec.get("comfy")
+    if not isinstance(comfy_raw, dict):
+        raise SpecValidationError(f"{source_path}: раздел 'comfy' обязателен и должен быть объектом")
+    comfy_repo = comfy_raw.get("repo")
+    if not isinstance(comfy_repo, str) or not comfy_repo.strip():
+        raise SpecValidationError(f"{source_path}: поле 'comfy.repo' обязательно и должно быть строкой")
+    comfy_ref = _optional_trimmed_str(comfy_raw.get("ref"), source_path, "comfy.ref")
+    comfy_commit = _optional_trimmed_str(comfy_raw.get("commit"), source_path, "comfy.commit")
+
+    custom_nodes_raw = raw_spec.get("custom_nodes", [])
+    if custom_nodes_raw is None:
+        custom_nodes_raw = []
+    if not isinstance(custom_nodes_raw, list):
+        raise SpecValidationError(f"{source_path}: 'custom_nodes' должен быть списком")
+    custom_nodes: List[Dict[str, Optional[str]]] = []
+    for idx, entry in enumerate(custom_nodes_raw):
+        if not isinstance(entry, dict):
+            raise SpecValidationError(
+                f"{source_path}: custom_nodes[{idx}] должен быть объектом (получено {type(entry).__name__})"
+            )
+        repo_value = entry.get("repo")
+        if not isinstance(repo_value, str) or not repo_value.strip():
+            raise SpecValidationError(
+                f"{source_path}: custom_nodes[{idx}].repo обязателен и должен быть строкой"
+            )
+        node_ref = _optional_trimmed_str(entry.get("ref"), source_path, f"custom_nodes[{idx}].ref")
+        node_commit = _optional_trimmed_str(entry.get("commit"), source_path, f"custom_nodes[{idx}].commit")
+        node_name = _optional_trimmed_str(entry.get("name"), source_path, f"custom_nodes[{idx}].name")
+        custom_nodes.append(
+            {
+                "repo": repo_value.strip(),
+                "ref": node_ref,
+                "commit": node_commit,
+                "name": node_name,
+            }
+        )
+
+    models_raw = raw_spec.get("models", [])
+    if models_raw is None:
+        models_raw = []
+    if not isinstance(models_raw, list):
+        raise SpecValidationError(f"{source_path}: 'models' должен быть списком")
+    models: List[Dict[str, Optional[str]]] = []
+    for idx, entry in enumerate(models_raw):
+        if not isinstance(entry, dict):
+            raise SpecValidationError(
+                f"{source_path}: models[{idx}] должен быть объектом (получено {type(entry).__name__})"
+            )
+        source_value = entry.get("source")
+        if not isinstance(source_value, str) or not source_value.strip():
+            raise SpecValidationError(
+                f"{source_path}: models[{idx}].source обязателен и должен быть строкой"
+            )
+        name_value = _optional_trimmed_str(entry.get("name"), source_path, f"models[{idx}].name")
+        target_subdir_value = _optional_trimmed_str(
+            entry.get("target_subdir"), source_path, f"models[{idx}].target_subdir"
+        )
+        models.append(
+            {
+                "source": source_value.strip(),
+                "name": name_value,
+                "target_subdir": target_subdir_value,
+            }
+        )
+
+    env_raw = raw_spec.get("env", {})
+    if env_raw is None:
+        env_raw = {}
+    if not isinstance(env_raw, dict):
+        raise SpecValidationError(f"{source_path}: 'env' (если задан) должен быть объектом")
+    env: Dict[str, str] = {}
+    for key, value in env_raw.items():
+        if not isinstance(key, str) or not key:
+            raise SpecValidationError(f"{source_path}: ключи в env должны быть строками")
+        env[key] = "" if value is None else str(value)
+
+    options_raw = raw_spec.get("options", {})
+    if options_raw is None:
+        options_raw = {}
+    if not isinstance(options_raw, dict):
+        raise SpecValidationError(f"{source_path}: 'options' (если задан) должен быть объектом")
+    allowed_options = {"offline", "skip_models"}
+    options: Dict[str, bool] = {}
+    for key, value in options_raw.items():
+        if key not in allowed_options:
+            raise SpecValidationError(f"{source_path}: опция '{key}' не поддерживается для schema v2")
+        if isinstance(value, bool):
+            options[key] = value
+        elif value in ("1", "true", "True", 1):
+            options[key] = True
+        elif value in ("0", "false", "False", 0):
+            options[key] = False
+        else:
+            raise SpecValidationError(
+                f"{source_path}: options.{key} ожидает булево значение (true/false)"
+            )
+
+    return {
+        "schema_version": 2,
+        "version_id": version_id,
+        "comfy": {
+            "repo": comfy_repo.strip(),
+            "ref": comfy_ref,
+            "commit": comfy_commit,
+        },
+        "custom_nodes": custom_nodes,
+        "models": models,
+        "env": env,
+        "options": options,
+    }
+
+
+def _optional_trimmed_str(value: object, source_path: pathlib.Path, field_name: str) -> Optional[str]:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise SpecValidationError(f"{source_path}: поле '{field_name}' должно быть строкой")
+    trimmed = value.strip()
+    return trimmed or None
 
 
 # ---------------------------- helpers: interpreter ---------------------------- #
@@ -459,7 +637,7 @@ def _resolve_python_interpreter(lock: Dict[str, object], verbose: bool = False) 
             if verbose:
                 log_info(f"Creating venv at {venv_dir} using {base_py}")
             venv_dir.parent.mkdir(parents=True, exist_ok=True)
-            code, out, err = run([base_py, "-m", "venv", str(venv_dir)])
+            code, out, err = run_command([base_py, "-m", "venv", str(venv_dir)])
             if code == 0 and venv_python.exists():
                 if verbose:
                     log_info(f"Venv created: {venv_python}")

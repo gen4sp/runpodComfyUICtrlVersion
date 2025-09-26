@@ -12,7 +12,7 @@
 -   Offline: допускаем частичные загрузки; symlink разрешены (при offline отсутствующие модели — warn)
 -   Обратную совместимость с `--lock` — убрана из handler/скриптов; интерфейс теперь `--version-id/--spec`
 
-### 1. Схема и валидация спецификации версий
+### 1. Схема и валидация спецификации версий — выполнено
 
 1.1 Ввести схему (schema_version=2):
 
@@ -23,7 +23,7 @@
     1.2 Реализовать валидацию схемы и понятные ошибки
     1.3 Обновить документацию и примеры
 
-### 2. Резолвер refs→commits и resolved‑lock
+### 2. Резолвер refs→commits и resolved‑lock — выполнено
 
 2.1 Реализовать резолвинг `comfy` и `custom_nodes`
 2.2 Сохранять результат в `~/.comfy-cache/resolved/<version_id>.lock.json`
@@ -32,7 +32,7 @@
 
 ### 3. Развёртывание версии (realize)
 
-3.1 `realize_version.py`: принимать новую спецификацию (`--version-id/--spec`), без `lock`
+3.1 `realize_version.py`: принимает новую спецификацию (`--version-id/--spec`), делает резолв + realize без `lock`
 3.2 `COMFY_HOME=/runpod-volume/comfy-<version_id>`, отдельный `.venv`
 3.3 Автосбор зависимостей нод (requirements/pyproject) + поддержка wheels (`--find-links /wheels`)
 3.4 Кастом‑ноды: клон в кеш `<repo>@<commit>`, symlink в `COMFY_HOME/custom_nodes/<name>`

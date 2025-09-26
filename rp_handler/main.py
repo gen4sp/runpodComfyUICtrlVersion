@@ -10,7 +10,7 @@ import sys
 from typing import Any, Dict, Optional
 
 from .resolver import (
-    apply_lock_and_prepare,  # legacy (no longer used)
+    SpecValidationError,
     resolve_version_spec,
     save_resolved_lock,
     realize_from_resolved,
@@ -80,9 +80,26 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     # Offline behavior may be specified in spec.options.offline or env COMFY_OFFLINE
     offline_env = str(os.environ.get("COMFY_OFFLINE", "")).strip().lower() in {"1", "true", "yes", "on"}
-    resolved = resolve_version_spec(spec_path, offline=offline_env)
+    try:
+        resolved = resolve_version_spec(spec_path, offline=offline_env)
+    except SpecValidationError as exc:
+        print(f"[ERROR] {exc}")
+        return 2
+    except RuntimeError as exc:
+        print(f"[ERROR] {exc}")
+        return 2
+
+    resolved_options = resolved.get("options") or {}
+    offline_effective = bool(resolved_options.get("offline") or offline_env)
+    skip_models_effective = bool(resolved_options.get("skip_models"))
+    resolved["options"] = {
+        **resolved_options,
+        "offline": offline_effective,
+        "skip_models": skip_models_effective,
+    }
+
     save_resolved_lock(resolved)
-    comfy_home_path, models_dir_path = realize_from_resolved(resolved, offline=offline_env)
+    comfy_home_path, models_dir_path = realize_from_resolved(resolved, offline=offline_effective)
 
     # If user requested explicit models dir override, honor it
     models_dir_effective = pathlib.Path(args.models_dir).resolve() if args.models_dir else models_dir_path

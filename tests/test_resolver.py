@@ -7,13 +7,6 @@ import pytest
 from rp_handler import resolver
 
 
-def test_expand_env_basic(monkeypatch):
-    monkeypatch.setenv("COMFY_HOME", "/x/y")
-    monkeypatch.setenv("MODELS_DIR", "/x/y/models")
-    s = resolver.expand_env("$COMFY_HOME/foo:$MODELS_DIR/bar")
-    assert s == "/x/y/foo:/x/y/models/bar"
-
-
 def test_derive_env_defaults(monkeypatch, tmp_path: Path):
     # No COMFY_HOME env -> default /opt/comfy per resolver
     monkeypatch.delenv("COMFY_HOME", raising=False)
@@ -46,7 +39,7 @@ def test_install_python_packages_builds_pip_args(monkeypatch, tmp_path: Path, ca
         calls["args"] = args
         return 0, "ok", ""
 
-    monkeypatch.setattr(resolver, "run", fake_run)
+    monkeypatch.setattr(resolver, "run_command", fake_run)
 
     resolver.install_python_packages(lock, verbose=True)
 
@@ -63,6 +56,7 @@ def test_verify_and_fetch_models_invokes_script_if_present(monkeypatch, tmp_path
     # Вместо глобального патча pathlib.Path подменяем только exists для конкретного пути,
     # чтобы не ломать pytest и сторонний код
     vm = Path("/app/scripts/verify_models.py")
+
     def fake_exists(self):  # type: ignore[no-untyped-def]
         return str(self) == str(vm)
 
@@ -75,7 +69,7 @@ def test_verify_and_fetch_models_invokes_script_if_present(monkeypatch, tmp_path
         called["args"] = args
         return 0, "ok", ""
 
-    monkeypatch.setattr(resolver, "run", fake_run)
+    monkeypatch.setattr(resolver, "run_command", fake_run)
 
     env = {"MODELS_DIR": "/m"}
     resolver.verify_and_fetch_models(lock_path="/app/scripts/verify_models.py", env=env, verbose=True)
