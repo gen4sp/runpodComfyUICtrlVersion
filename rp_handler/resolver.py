@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Tuple
 
 from .utils import log_info, log_warn, log_error, run_command, expand_env_vars
 from scripts import verify_models
+from . import cache as shared_cache
 
 
 _MODEL_FETCH_TIMEOUT = int(os.environ.get("COMFY_MODELS_TIMEOUT", "180"))
@@ -234,26 +235,13 @@ def _pick_default_comfy_home(version_id: str) -> pathlib.Path:
 
 
 def _nodes_cache_root() -> pathlib.Path:
-    # Priority: env var > runpod conventional path > user cache dir
-    env_path = os.environ.get("COMFY_CACHE_NODES")
-    if env_path:
-        return pathlib.Path(env_path)
-    # User provided RunPod volume convention
-    rp_convention = pathlib.Path("/workspace/custom_nodes/workspace")
-    if rp_convention.exists():
-        return rp_convention
-    # Default to user cache dir
-    return pathlib.Path(os.path.expanduser("~/.comfy-cache/custom_nodes"))
+    return shared_cache.nodes_cache_dir()
 
 
 def _models_dir_default(comfy_home: pathlib.Path) -> pathlib.Path:
     env_models = os.environ.get("MODELS_DIR")
     if env_models:
         return pathlib.Path(env_models)
-    # If /workspace/modes exists (per user convention), prefer it; otherwise use COMFY_HOME/models
-    wp_models = pathlib.Path("/workspace/models")
-    if wp_models.exists():
-        return wp_models
     return comfy_home / "models"
 
 
