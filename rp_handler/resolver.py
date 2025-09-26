@@ -6,9 +6,14 @@ import os
 import pathlib
 import shutil
 import sys
+import tempfile
 from typing import Dict, List, Optional, Tuple
 
 from .utils import log_info, log_warn, log_error, run_command, expand_env_vars
+from scripts import verify_models
+
+
+_MODEL_FETCH_TIMEOUT = int(os.environ.get("COMFY_MODELS_TIMEOUT", "180"))
 
 
 # Функция expand_env удалена, используется expand_env_vars из utils
@@ -286,7 +291,8 @@ def resolve_version_spec(spec_path: pathlib.Path, offline: bool = False) -> Dict
         "version_id": version_id,
         "comfy": {},
         "custom_nodes": [],
-        "models": spec.get("models", []),
+        # модели резолвим позже (для удобства обработки target_subdir)
+        "models": [],
         "env": spec.get("env", {}),
         "options": {},
         "source_spec": str(spec_path),
@@ -339,6 +345,30 @@ def resolve_version_spec(spec_path: pathlib.Path, offline: bool = False) -> Dict
                     )
         out_nodes.append({"name": n_name, "repo": n_repo, "ref": n_ref, "commit": n_commit})
     resolved["custom_nodes"] = out_nodes
+
+    # Models: добавляем target_path на основе target_subdir (если не указан явно)
+    models: List[Dict[str, object]] = []
+    for m in spec.get("models", []):
+        if not isinstance(m, dict):
+            continue
+        model_entry: Dict[str, object] = dict(m)
+        target_path = model_entry.get("target_path") or model_entry.get("path")
+        subdir = model_entry.get("target_subdir")
+        name = model_entry.get("name") or model_entry.get("source")
+        if not target_path:
+            # Сформируем путь из MODELS_DIR + target_subdir + name
+            if not isinstance(subdir, str) or not subdir.strip():
+                log_warn(
+                    f"models entry '{name}' не имеет target_path/target_subdir — используем корень MODELS_DIR"
+                )
+                rel_path = pathlib.Path(str(name or "model"))
+            else:
+                rel_path = pathlib.Path(subdir.strip()) / str(name or "model")
+            model_entry["target_path"] = str(rel_path)
+        else:
+            model_entry["target_path"] = str(target_path)
+        models.append(model_entry)
+    resolved["models"] = models
 
     return resolved
 
@@ -458,11 +488,110 @@ def realize_from_resolved(
                     if code != 0:
                         log_warn(f"pip install (pyproject) for node {n_name} failed: {err or out}")
 
+    # Models: сверяем с кешем и создаём симлинки
+    _prepare_models(
+        resolved_models=resolved.get("models") or [],
+        models_dir=models_dir,
+        offline=offline,
+    )
+
     # Export env
     os.environ["COMFY_HOME"] = str(comfy_home)
     os.environ["MODELS_DIR"] = str(models_dir)
     _write_extra_model_paths(comfy_home=comfy_home, models_dir=models_dir)
     return comfy_home, models_dir
+
+
+def _prepare_models(*, resolved_models: List[Dict[str, object]], models_dir: pathlib.Path, offline: bool) -> None:
+    if not isinstance(resolved_models, list) or not resolved_models:
+        return
+
+    offline_effective = bool(offline or verify_models.is_offline_mode())
+
+    for model in resolved_models:
+        if not isinstance(model, dict):
+            continue
+
+        source = str(model.get("source") or "").strip()
+        target_path_raw = str(model.get("target_path") or "").strip()
+        checksum_raw = str(model.get("checksum") or "").strip() or None
+        name = str(model.get("name") or target_path_raw or "model").strip() or "model"
+
+        if not target_path_raw:
+            log_warn(f"models entry '{name}' пропущен: не указан target_path")
+            continue
+
+        target_path = pathlib.Path(target_path_raw)
+        if target_path.is_absolute():
+            target_abs = target_path.resolve()
+        else:
+            target_abs = (models_dir / target_path).resolve()
+        target_abs.parent.mkdir(parents=True, exist_ok=True)
+
+        checksum_algo, checksum_hex = verify_models.parse_checksum(checksum_raw)
+
+        if not source:
+            if not target_abs.exists():
+                log_warn(f"Модель '{name}' не имеет source и отсутствует по пути {target_abs}")
+            elif checksum_hex and checksum_algo:
+                actual = verify_models.compute_checksum(str(target_abs), algo=checksum_algo).split(":", 1)[1]
+                if actual != checksum_hex:
+                    log_warn(
+                        f"Модель '{name}' имеет checksum mismatch и не имеет source для переустановки"
+                    )
+            continue
+
+        cache_path: Optional[pathlib.Path] = None
+        try:
+            cache_path = verify_models.ensure_cached_model(
+                source=source,
+                checksum_algo=checksum_algo,
+                checksum_hex=checksum_hex,
+                name=name,
+                offline=offline_effective,
+            )
+        except RuntimeError as exc:
+            if offline_effective:
+                log_warn(f"Offline режим: {exc}")
+                continue
+            log_warn(f"Не удалось подготовить кеш модели '{name}': {exc}")
+
+        if cache_path:
+            status = verify_models.ensure_link_from_cache(cache_path, target_abs)
+            log_info(f"Модель '{name}': {status} ← {cache_path}")
+            continue
+
+        if target_abs.exists():
+            if checksum_hex and checksum_algo:
+                actual = verify_models.compute_checksum(str(target_abs), algo=checksum_algo).split(":", 1)[1]
+                if actual == checksum_hex:
+                    continue
+                if offline_effective:
+                    log_warn(
+                        f"Offline режим: checksum mismatch для '{name}' ({target_abs}), оставляю существующий файл"
+                    )
+                    continue
+            else:
+                # файл существует, checksum не задан — считаем валидным
+                continue
+
+        if offline_effective:
+            log_warn(
+                f"Offline режим: модель '{name}' отсутствует (или checksum mismatch) и недоступна для загрузки"
+            )
+            continue
+
+        try:
+            with tempfile.TemporaryDirectory(prefix="model_fetch_", dir=str(models_dir)) as tmp_dir:
+                tmp_path = verify_models.fetch_to_temp(source, tmp_dir=tmp_dir, timeout=_MODEL_FETCH_TIMEOUT)
+                if checksum_hex and checksum_algo:
+                    actual = verify_models.compute_checksum(tmp_path, algo=checksum_algo).split(":", 1)[1]
+                    if actual != checksum_hex:
+                        raise RuntimeError("downloaded checksum mismatch")
+                verify_models.atomic_copy(tmp_path, str(target_abs))
+                log_info(f"Модель '{name}' загружена: {target_abs}")
+        except Exception as exc:
+            raise RuntimeError(f"Не удалось загрузить модель '{name}': {exc}") from exc
 
 
 def _write_extra_model_paths(*, comfy_home: pathlib.Path, models_dir: pathlib.Path) -> None:

@@ -27,7 +27,7 @@ export COMFY_HOME="$HOME/comfy"
 
 ```bash
 python3 scripts/create_version.py \
-  --name "my-version" \
+  --name "wan22-fast" \
   --comfy-path "$COMFY_HOME" \
   --models-spec ./models/wan22-fast-models.yml \
   --pretty
@@ -51,14 +51,14 @@ python3 scripts/create_version.py \
 4. Развернуть окружение версии (создаст изолированный `.venv`, подтянет ноды и модели):
 
 ```bash
-python3 scripts/realize_version.py --version-id "my-version"
+python3 scripts/realize_version.py --version-id "wan22-fast"
 ```
 
 5. Запустить workflow локально через handler:
 
 ```bash
 ./scripts/run_handler_local.sh \
-  --version-id "my-version" \
+  --version-id "wan22-fast" \
   --workflow ./workflows/minimal.json \
   --output base64
 ```

@@ -25,6 +25,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -124,6 +125,156 @@ def run_command(command: List[str]) -> Tuple[int, str, str]:
 # ----------------------------- Cache management ----------------------------- #
 
 
+_CACHE_ENV_VARS = ("COMFY_CACHE_MODELS", "COMFY_MODELS_CACHE")
+_CACHE_DISABLE_ENV = ("COMFY_DISABLE_MODEL_CACHE", "COMFY_MODELS_CACHE_DISABLE")
+_DEFAULT_TIMEOUT = int(os.environ.get("COMFY_MODELS_TIMEOUT", "180"))
+
+
+def _cache_root() -> pathlib.Path:
+    for env_var in _CACHE_ENV_VARS:
+        value = os.environ.get(env_var)
+        if value:
+            return pathlib.Path(value).expanduser().resolve()
+
+    candidates = []
+    runpod_volume = pathlib.Path("/runpod-volume")
+    if runpod_volume.exists():
+        candidates.append(runpod_volume / "cache" / "models")
+    workspace = pathlib.Path("/workspace")
+    if workspace.exists():
+        candidates.extend([
+            workspace / "cache" / "models",
+            workspace / "models-cache",
+        ])
+    candidates.append(pathlib.Path(os.path.expanduser("~/.comfy-cache/models")))
+
+    for candidate in candidates:
+        parent = candidate.parent
+        if parent.exists() or candidate == candidates[-1]:
+            return candidate.resolve()
+    return pathlib.Path(os.path.expanduser("~/.comfy-cache/models")).resolve()
+
+
+def cache_enabled(force: Optional[bool] = None) -> bool:
+    if force is not None:
+        return force
+    for env_var in _CACHE_DISABLE_ENV:
+        value = os.environ.get(env_var)
+        if value and value.strip().lower() in {"1", "true", "yes", "on"}:
+            return False
+    return True
+
+
+def is_offline_mode() -> bool:
+    value = os.environ.get("COMFY_OFFLINE") or os.environ.get("COMFY_OFFLINE_MODE")
+    return bool(value and str(value).strip().lower() in {"1", "true", "yes", "on"})
+
+
+def _safe_stem(value: str) -> str:
+    if not value:
+        return "model"
+    stem = pathlib.Path(value).stem or value
+    sanitized = re.sub(r"[^a-zA-Z0-9._-]+", "-", stem)
+    return sanitized.strip("-_") or "model"
+
+
+def build_cache_filename(
+    *, source: str, checksum_algo: Optional[str], checksum_hex: Optional[str], name: str
+) -> str:
+    parsed = urllib.parse.urlparse(source)
+    suffix = pathlib.Path(parsed.path or pathlib.Path(name).name).suffix
+    if not suffix:
+        suffix = pathlib.Path(name).suffix
+
+    if checksum_algo and checksum_hex:
+        key = f"{checksum_algo}-{checksum_hex}"[:64]
+    else:
+        digest = hashlib.sha1(source.encode("utf-8")).hexdigest()[:16]
+        key = f"src-{digest}"
+
+    stem = f"{_safe_stem(name)}-{key}"[:128]
+    return f"{stem}{suffix}" if suffix else stem
+
+
+def ensure_cached_model(
+    *,
+    source: str,
+    checksum_algo: Optional[str],
+    checksum_hex: Optional[str],
+    name: str,
+    cache_root: Optional[pathlib.Path] = None,
+    timeout: int = _DEFAULT_TIMEOUT,
+    offline: bool = False,
+    cache_enabled_flag: Optional[bool] = None,
+) -> Optional[pathlib.Path]:
+    if not cache_enabled(force=cache_enabled_flag):
+        return None
+
+    root = cache_root or _cache_root()
+    root.mkdir(parents=True, exist_ok=True)
+
+    filename = build_cache_filename(
+        source=source,
+        checksum_algo=checksum_algo,
+        checksum_hex=checksum_hex,
+        name=name,
+    )
+    cache_path = root / filename
+
+    if cache_path.exists():
+        if checksum_hex:
+            algo = checksum_algo or "sha256"
+            actual = compute_checksum(str(cache_path), algo=algo).split(":", 1)[1]
+            if actual != checksum_hex:
+                if offline:
+                    raise RuntimeError(
+                        f"cached artifact checksum mismatch for {name} ({cache_path})"
+                    )
+                cache_path.unlink()
+            else:
+                return cache_path
+        else:
+            return cache_path
+
+    if offline:
+        raise RuntimeError(f"cache miss for {name} in offline mode")
+
+    tmp_dir = tempfile.mkdtemp(prefix="cache_model_", dir=str(root))
+    try:
+        tmp_path = fetch_to_temp(source, tmp_dir=tmp_dir, timeout=timeout)
+        if checksum_hex:
+            algo = checksum_algo or "sha256"
+            actual = compute_checksum(tmp_path, algo=algo).split(":", 1)[1]
+            if actual != checksum_hex:
+                raise RuntimeError(f"downloaded checksum mismatch for {name}")
+        safe_makedirs(str(cache_path.parent))
+        shutil.move(tmp_path, cache_path)
+        return cache_path
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def ensure_link_from_cache(cache_path: pathlib.Path, target_path: pathlib.Path) -> str:
+    target = pathlib.Path(target_path).expanduser().resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    if target.exists() or target.is_symlink():
+        try:
+            if same_files(str(cache_path), str(target)):
+                return "present"
+        except Exception:
+            pass
+        if target.is_dir() and not target.is_symlink():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
+
+    try:
+        os.symlink(cache_path, target)
+        return "linked"
+    except (OSError, NotImplementedError):
+        shutil.copy2(cache_path, target)
+        return "copied"
 
 
 # ------------------------------- Downloaders -------------------------------- #
@@ -394,6 +545,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--models-dir", default=None, help="Base models dir for $MODELS_DIR expansion (default: $COMFY_HOME/models)")
     p.add_argument("--overwrite", action="store_true", help="Overwrite existing files if checksum mismatch and source is available")
     p.add_argument("--timeout", type=int, default=120, help="Network timeout in seconds for http(s)/gs downloads")
+    p.add_argument("--cache", action="store_true", help="Enable global models cache (default: env-driven)")
     p.add_argument("--verbose", action="store_true", help="Verbose output (per-model status)")
     return p
 

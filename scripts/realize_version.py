@@ -22,6 +22,11 @@ import sys
 import json
 from typing import Dict, Optional
 
+# Ensure repository root is importable when executed from arbitrary cwd
+_MODULE_ROOT = pathlib.Path(__file__).resolve().parent.parent
+if str(_MODULE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_MODULE_ROOT))
+
 from rp_handler.resolver import (
     SpecValidationError,
     resolve_version_spec,
@@ -32,7 +37,7 @@ from rp_handler.resolver import (
 
 def _repo_root() -> pathlib.Path:
     # repo root = parent of scripts directory
-    return pathlib.Path(__file__).resolve().parent.parent
+    return _MODULE_ROOT
 
 
 def _file_exists(p: pathlib.Path) -> bool:
