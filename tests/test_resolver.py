@@ -85,8 +85,9 @@ def test_apply_lock_and_prepare_smoke(monkeypatch):
     def fake_install(lock, verbose):  # type: ignore[no-untyped-def]
         called["pip"] = True
 
-    def fake_verify(lock_path, env, verbose):  # type: ignore[no-untyped-def]
+    def fake_verify(lock_path, env, verbose, no_cache):  # type: ignore[no-untyped-def]
         called["verify"] = True
+        called["no_cache"] = no_cache
 
     monkeypatch.setattr(resolver, "install_python_packages", fake_install)
     monkeypatch.setattr(resolver, "verify_and_fetch_models", fake_verify)
@@ -94,5 +95,6 @@ def test_apply_lock_and_prepare_smoke(monkeypatch):
     resolver.apply_lock_and_prepare(lock_path="lock.json", models_dir=None, verbose=True)
     assert called["pip"] is True
     assert called["verify"] is True
+    assert called["no_cache"] is True
 
 

@@ -366,9 +366,9 @@ Handler теперь поддерживает реальное выполнен�
 Двойная сборка и сравнение SHA/чек-сумм:
 
 ```bash
-python3 scripts/repro_env_compare.py \
-  --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json \
-  --verbose
+python3 scripts/version.py resolve "$COMFY_VERSION_NAME"
+python3 scripts/version.py realize "$COMFY_VERSION_NAME" --dry-run
+python3 scripts/version.py test "$COMFY_VERSION_NAME" --workflow ./workflows/example.json --output base64
 ```
 
 Сохранить и сравнить хэш артефакта воркфлоу:

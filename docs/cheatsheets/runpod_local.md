@@ -38,7 +38,6 @@ export COMFY_VERSION_NAME="my-version"
 ## Параметры run_handler_local.sh
 
 -   `--version-id ID` — идентификатор версии (использует `versions/<id>.json`)
--   `--spec FILE` — путь к файлу спецификации версии (альтернатива `--version-id`)
 -   `--workflow FILE` — путь к workflow файлу (обязательно)
 -   `--output base64|gcs` — режим вывода (по умолчанию: gcs)
 
@@ -63,9 +62,6 @@ export GCS_RETRY_BASE_SLEEP="0.5"
 export GCS_PUBLIC="false"
 export GCS_SIGNED_URL_TTL="3600"
 export GCS_VALIDATE="true"
-
-# Lock файл (альтернатива COMFY_VERSION_NAME)
-export LOCK_PATH="/runpod-volume/lockfiles/comfy-my-version.lock.json"
 
 # HF токены для приватных моделей
 export HF_TOKEN="hf_xxxxxxxxxxxxxxxxxxxxxxxxx"

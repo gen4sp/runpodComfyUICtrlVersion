@@ -22,6 +22,7 @@ def test_main_base64_to_stdout(tmp_path, capsys, monkeypatch):
     wf.write_text("{\n  \"graph\": {}\n}\n", encoding="utf-8")
 
     # Stub heavy operations
+    monkeypatch.setattr(handler_main, "spec_path_for_version", lambda version_id: spec)
     monkeypatch.setattr(handler_main, "resolve_version_spec", lambda p, offline=False: {
         "schema_version": 2,
         "version_id": "test",
@@ -45,15 +46,15 @@ def test_main_base64_to_stdout(tmp_path, capsys, monkeypatch):
     monkeypatch.setattr(handler_main, "run_workflow_real", lambda wf_path, comfy_home, models_dir, verbose: wf.read_bytes())
 
     code = handler_main.main([
-        "--spec", str(spec),
+        "--version-id", "test",
         "--workflow", str(wf),
         "--output", "base64",
         "--verbose",
     ])
     assert code == 0
     out = capsys.readouterr().out.strip()
-    # Should be base64 of the workflow content
-    assert base64.b64decode(out) == wf.read_bytes()
+    decoded = base64.b64decode(out.encode("utf-8"))
+    assert decoded == wf.read_bytes()
 
 
 def test_main_gcs_invokes_emit(monkeypatch, tmp_path):
@@ -80,6 +81,7 @@ def test_main_gcs_invokes_emit(monkeypatch, tmp_path):
         }
 
     # Skip heavy preparation
+    monkeypatch.setattr(handler_main, "spec_path_for_version", lambda version_id: spec)
     monkeypatch.setattr(handler_main, "resolve_version_spec", lambda p, offline=False: {
         "schema_version": 2,
         "version_id": "test",
@@ -103,7 +105,7 @@ def test_main_gcs_invokes_emit(monkeypatch, tmp_path):
     monkeypatch.setattr(handler_main, "emit_output", fake_emit)
 
     code = handler_main.main([
-        "--spec", str(spec),
+        "--version-id", "test",
         "--workflow", str(tmp_path / "missing.json"),
         "--output", "gcs",
         "--gcs-bucket", "bkt",
