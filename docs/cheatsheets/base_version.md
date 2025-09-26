@@ -10,11 +10,9 @@ cd "$COMFY_HOME"
 source .venv/bin/activate
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
-python3 ~/runpodComfyuiVersionControl/scripts/create_version.py \
-  --name "base-cpu" \
-  --comfy-path "$COMFY_HOME/ComfyUI" \
-  --venv "$COMFY_HOME/.venv" \
-  --pretty
+# Создание версии
+python3 scripts/version.py create base-cpu \
+  --repo https://github.com/comfyanonymous/ComfyUI@main
 ```
 
 ## Создание базовой версии с основными нодами
@@ -37,14 +35,11 @@ git clone https://github.com/Fannovel16/comfyui_controlnet_aux custom_nodes/comf
 cd custom_nodes/comfyui_controlnet_aux && pip install -r requirements.txt && cd ../..
 
 # Создание версии
-python3 ~/runpodComfyuiVersionControl/scripts/create_version.py \
-  --name "base-with-core-nodes" \
-  --comfy-path "$COMFY_HOME/ComfyUI" \
-  --venv "$COMFY_HOME/.venv" \
-  --custom-node repo=https://github.com/city96/ComfyUI-GGUF,name=gguf \
-  --custom-node repo=https://github.com/kijai/ComfyUI-VideoHelperSuite,name=video-helper \
-  --custom-node repo=https://github.com/Fannovel16/comfyui_controlnet_aux,name=controlnet-aux \
-  --pretty
+python3 scripts/version.py create base-with-core-nodes \
+  --repo https://github.com/comfyanonymous/ComfyUI@main \
+  --nodes https://github.com/city96/ComfyUI-GGUF@main \
+  --nodes https://github.com/kijai/ComfyUI-VideoHelperSuite@main \
+  --nodes https://github.com/Fannovel16/comfyui_controlnet_aux@main
 ```
 
 ## Создание базовой версии для FLUX
@@ -64,14 +59,11 @@ git clone https://github.com/XLabs-AI/x-flux-comfyui custom_nodes/x-flux-comfyui
 cd custom_nodes/x-flux-comfyui && pip install -r requirements.txt && cd ../..
 
 # Создание версии
-python3 ~/runpodComfyuiVersionControl/scripts/create_version.py \
-  --name "flux-base" \
-  --comfy-path "$COMFY_HOME/ComfyUI" \
-  --venv "$COMFY_HOME/.venv" \
-  --custom-node repo=https://github.com/city96/ComfyUI-GGUF,name=gguf \
-  --custom-node repo=https://github.com/XLabs-AI/x-flux-comfyui,name=x-flux \
-  --models-spec ~/runpodComfyuiVersionControl/models/flux-models.yml \
-  --pretty
+python3 scripts/version.py create base-flux \
+  --repo https://github.com/comfyanonymous/ComfyUI@main \
+  --nodes https://github.com/city96/ComfyUI-GGUF@main \
+  --nodes https://github.com/author/flux-node@main \
+  --models models/flux-models.yml
 ```
 
 ## Создание базовой версии для Wan

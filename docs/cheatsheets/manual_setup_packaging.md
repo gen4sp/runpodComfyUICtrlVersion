@@ -295,16 +295,8 @@ wait $COMFY_PID 2>/dev/null
 
 # Шаг 5: Создание версии
 echo "Step 5: Creating version lock file..."
-python "$REPO_ROOT/scripts/create_version.py" \
-  --name "$VERSION_NAME" \
-  --comfy-path "$COMFY_HOME/ComfyUI" \
-  --venv "$COMFY_HOME/.venv" \
-  --custom-node repo=https://github.com/city96/ComfyUI-GGUF,name=gguf,path="$COMFY_HOME/custom_nodes/ComfyUI-GGUF" \
-  --custom-node repo=https://github.com/kijai/ComfyUI-VideoHelperSuite,name=video-helper,path="$COMFY_HOME/custom_nodes/ComfyUI-VideoHelperSuite" \
-  --custom-node repo=https://github.com/Fannovel16/comfyui_controlnet_aux,name=controlnet-aux,path="$COMFY_HOME/custom_nodes/comfyui_controlnet_aux" \
-  --custom-node repo=https://github.com/kijai/ComfyUI-WanVideoWrapper,name=wan-wrapper,path="$COMFY_HOME/custom_nodes/ComfyUI-WanVideoWrapper" \
-  --models-spec "$REPO_ROOT/models/ctest.yml" \
-  --pretty
+python "$REPO_ROOT/scripts/version.py" create "$VERSION_NAME" --repo https://github.com/comfyanonymous/ComfyUI@main --models "$REPO_ROOT/models/ctest.yml"
+echo "Spec file: versions/$VERSION_NAME.json"
 
 # Шаг 6: Верификация
 echo "Step 6: Verifying version..."
@@ -321,7 +313,7 @@ timeout 20 python ComfyUI/main.py --headless && echo "✓ Clone test passed"
 
 echo "=== SETUP COMPLETED SUCCESSFULLY ==="
 echo "Version: $VERSION_NAME"
-echo "Lock file: lockfiles/comfy-$VERSION_NAME.lock.json"
+echo "Spec file: versions/$VERSION_NAME.json"
 echo "Setup directory: $COMFY_HOME"
 ```
 
@@ -347,7 +339,7 @@ python scripts/validate_yaml_models.py --yaml models/ctest.yml --models-dir mode
 cd "$COMFY_HOME"
 source .venv/bin/activate
 pip freeze > current_requirements.txt
-python ~/runpodComfyuiVersionControl/scripts/create_version.py --name debug --pretty
+python ~/runpodComfyuiVersionControl/scripts/version.py create debug --repo https://github.com/comfyanonymous/ComfyUI@main
 ```
 
 ## Профилирование и оптимизация

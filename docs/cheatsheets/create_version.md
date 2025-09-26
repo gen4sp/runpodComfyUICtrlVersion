@@ -1,96 +1,70 @@
-# Создание новой версии ComfyUI
+# Создание новой версии ComfyUI (schema v2)
 
-## Создание базовой версии с фиксацией зависимостей
-
-```bash
-python3 scripts/create_version.py --name "my-version" --comfy-repo https://github.com/comfyanonymous/ComfyUI --requirements ./requirements.txt --pretty
-```
-
-## Создание версии с кастом нодами
+## Быстрый старт
 
 ```bash
-python3 scripts/create_version.py \
-  --name "flux-version" \
-  --comfy-repo https://github.com/comfyanonymous/ComfyUI \
-  --custom-node repo=https://github.com/city96/ComfyUI-GGUF,name=gguf \
-  --requirements ./requirements.txt \
-  --models-spec ./models/flux-models.yml \
-  --pretty
+python3 scripts/version.py create "my-version" \
+  --repo https://github.com/comfyanonymous/ComfyUI@main \
+  --nodes https://github.com/comfyanonymous/ComfyUI-Custom-Scripts@main \
+  --models '{"source": "https://example.com/model.safetensors", "target_subdir": "checkpoints"}'
 ```
 
-## Создание версии с несколькими кастом нодами
+## Несколько кастом нод
 
 ```bash
-python3 scripts/create_version.py \
-  --name "wan-version" \
-  --comfy-repo https://github.com/comfyanonymous/ComfyUI \
-  --custom-node repo=https://github.com/kijai/ComfyUI-WanVideoWrapper,name=wan-wrapper \
-  --custom-node repo=https://github.com/city96/ComfyUI-GGUF,name=gguf \
-  --requirements ./requirements.txt \
-  --models-spec ./models/wan22-fast-models.yml \
-  --pretty
+python3 scripts/version.py create "wan-version" \
+  --repo https://github.com/comfyanonymous/ComfyUI@main \
+  --nodes https://github.com/kijai/ComfyUI-WanVideoWrapper@main \
+  --nodes https://github.com/city96/ComfyUI-GGUF@main \
+  --models '{"source": "https://huggingface.co/.../model.safetensors", "target_subdir": "unet"}'
 ```
 
-## Создание версии с явными путями
+## Модели через файл JSON/YAML
 
 ```bash
-export COMFY_HOME="$HOME/comfy"
-python3 scripts/create_version.py \
-  --name "local-version" \
-  --comfy-path "$COMFY_HOME/ComfyUI" \
-  --venv "$COMFY_HOME/.venv" \
-  --models-spec ./models/ctest.yml \
-  --pretty
+python3 scripts/version.py create "flux" \
+  --repo https://github.com/comfyanonymous/ComfyUI@main \
+  --models models/flux-models.json
 ```
 
-## Параметры скрипта create_version.py
-
--   `--name` — имя версии (обязательно, попадет в lockfiles/comfy-<name>.lock.json)
--   `--comfy-path` — путь к локальному репозиторию ComfyUI
--   `--comfy-repo` — URL репозитория для метаданных
--   `--custom-node` — кастом ноды (можно повторять):
-    -   `repo=URL` — URL репозитория
-    -   `name=NAME` — имя ноды
-    -   `path=PATH` — локальный путь
-    -   `commit=SHA` — конкретный коммит
--   `--venv` — путь к виртуальному окружению
--   `--requirements` — файл с pinned зависимостями
--   `--models-spec` — YAML/JSON со списком моделей
--   `--models-dir` — базовая директория для моделей (по умолчанию `$COMFY_HOME/models`)
--   `--output` — путь для сохранения lock-файла (по умолчанию `lockfiles/comfy-<name>.lock.json`)
--   `--pretty` — человекочитаемый JSON
--   `--wheel-url name=url` — подмена URL для пакета
-
-## Примеры моделей в YAML
-
-```yaml
-models:
-    - name: "flux-dev"
-      source: "hf://blackforestlabs/FLUX.1-dev/flux1-dev.safetensors"
-      target_path: "$MODELS_DIR/unet/flux1-dev.safetensors"
-    - name: "clip-l"
-      source: "hf://comfyanonymous/flux_text_encoders/t5xxl_fp8_e4m3fn.safetensors"
-      target_path: "$MODELS_DIR/clip/t5xxl_fp8_e4m3fn.safetensors"
-```
-
-## Проверка созданного lock-файла
-
-## Быстрое применение версии из JSON
-
-После создания lock‑файла оформите спека‑версию и разверните её (новая схема):
+## Автоматическое вычисление checksum
 
 ```bash
-# versions/my-version.json
-cat > versions/my-version.json << 'JSON'
+python3 scripts/version.py create "local" \
+  --repo https://github.com/comfyanonymous/ComfyUI@main \
+  --models-root "$MODELS_DIR" \
+  --auto-checksum \
+  --models '{"source": "file:///workspace/models/my.safetensors", "target_subdir": "checkpoints"}'
+```
+
+## Параметры `scripts/version.py create`
+
+-   `version_id` — имя версии (используется как `versions/<id>.json`).
+-   `--repo URL[@ref]` — репозиторий ComfyUI, ref опционален; commit резолвится автоматически.
+-   `--nodes VALUE` — можно повторять. VALUE: JSON-объект, файл или строка `<repo>@<ref>`.
+-   `--models VALUE` — можно повторять. VALUE: JSON-объект или файл со списком объектов.
+-   `--models-root PATH` — база локальных моделей для авто-checksum.
+-   `--auto-checksum` — вычислить `sha256` для найденных локальных моделей.
+-   `--output PATH` — путь для сохранения спеки (по умолчанию `versions/<id>.json`).
+
+## Структура модели
+
+```json
 {
-  "schema_version": 2,
-  "version_id": "my-version",
-  "comfy": { "repo": "https://github.com/comfyanonymous/ComfyUI", "ref": "master" },
-  "custom_nodes": [],
-  "models": []
+    "source": "https://example.com/model.safetensors",
+    "target_subdir": "checkpoints",
+    "target_path": "checkpoints/model.safetensors",
+    "name": "model.safetensors",
+    "checksum": "sha256:..."
 }
-JSON
+```
 
-# Развернуть окружение (создаст отдельный .venv и докачает модели)
-python3 scripts/realize_version.py --version-id "my-version"
+## После создания
+
+```bash
+# Проверить, что спецификация резолвится
+python3 scripts/version.py resolve my-version
+
+# Развернуть
+python3 scripts/version.py realize my-version
 ```

@@ -19,10 +19,10 @@
 ### 2) Создание lock-файла
 
 1. Минимальный lock без моделей:
-    - `python scripts/create_version.py --name local --comfy-path "$COMFY_HOME/ComfyUI" --pretty`
+    - `python scripts/version.py create local --repo https://github.com/comfyanonymous/ComfyUI@main`
     - Ожидаемый вывод: путь к `lockfiles/comfy-local.lock.json`. Файл должен существовать и содержать базовые секции.
 2. (Опционально) Добавить python-зависимости из `requirements.txt`:
-    - `python scripts/create_version.py --name local-req --comfy-path "$COMFY_HOME/ComfyUI" --requirements requirements.txt --pretty`
+    - `python scripts/version.py create local-req --repo https://github.com/comfyanonymous/ComfyUI@main --models models/demo.json`
 
 ### 3) Верификация моделей (локально без скачиваний)
 

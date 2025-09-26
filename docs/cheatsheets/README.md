@@ -45,7 +45,9 @@ export COMFY_HOME="$HOME/comfy"
 ./scripts/init_comfyui.sh --install-torch auto
 
 # 2. Создание версии
-python3 scripts/create_version.py --name my-version --comfy-repo https://github.com/comfyanonymous/ComfyUI
+python3 scripts/version.py create my-version \
+  --repo https://github.com/comfyanonymous/ComfyUI@main \
+  --models '{"source": "https://example.com/model.safetensors", "target_subdir": "checkpoints"}'
 
 # 3. Реализация версии из JSON (создаст изолированный COMFY_HOME)
 python3 scripts/realize_version.py --version-id "my-version"
@@ -74,7 +76,7 @@ source .venv/bin/activate
 git clone https://github.com/city96/ComfyUI-GGUF custom_nodes/ComfyUI-GGUF
 
 # Создание lock
-python3 ~/runpodComfyuiVersionControl/scripts/create_version.py --name "manual-v1" --comfy-path ComfyUI --venv .venv --pretty
+defunct command removed – используйте scripts/version.py create
 ```
 
 ## 🏷️ Теги и категории

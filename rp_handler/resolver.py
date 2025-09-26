@@ -11,7 +11,12 @@ from typing import Dict, List, Optional, Tuple
 
 from .utils import log_info, log_warn, log_error, run_command, expand_env_vars
 from scripts import verify_models
-from . import cache as shared_cache
+from rp_handler.cache import (
+    models_cache_dir,
+    nodes_cache_dir,
+    comfy_cache_dir,
+    resolved_cache_dir,
+)
 
 
 _MODEL_FETCH_TIMEOUT = int(os.environ.get("COMFY_MODELS_TIMEOUT", "180"))
@@ -31,20 +36,18 @@ def expand_env(path: str, extra_env: Optional[Dict[str, str]] = None) -> str:
 def derive_env(models_dir: Optional[str]) -> Dict[str, str]:
     """Вычислить переменные окружения для ComfyUI."""
     env: Dict[str, str] = {}
-    
-    # COMFY_HOME
+
     comfy_home = os.environ.get("COMFY_HOME")
     if comfy_home:
         env["COMFY_HOME"] = str(pathlib.Path(comfy_home).resolve())
     else:
         env["COMFY_HOME"] = str(pathlib.Path("/opt/comfy").resolve())
-    
-    # MODELS_DIR
+
     if models_dir:
         env["MODELS_DIR"] = str(pathlib.Path(models_dir).resolve())
     else:
-        env["MODELS_DIR"] = str(pathlib.Path(env["COMFY_HOME"]) / "models")
-    
+        env["MODELS_DIR"] = str(models_cache_dir())
+
     return env
 
 
@@ -235,14 +238,76 @@ def _pick_default_comfy_home(version_id: str) -> pathlib.Path:
 
 
 def _nodes_cache_root() -> pathlib.Path:
-    return shared_cache.nodes_cache_dir()
+    return nodes_cache_dir()
+
+
+def _comfy_cache_root() -> pathlib.Path:
+    return comfy_cache_dir()
 
 
 def _models_dir_default(comfy_home: pathlib.Path) -> pathlib.Path:
     env_models = os.environ.get("MODELS_DIR")
     if env_models:
         return pathlib.Path(env_models)
-    return comfy_home / "models"
+    return models_cache_dir()
+
+
+def _ensure_repo_cache(repo: str, *, offline: bool) -> pathlib.Path:
+    cache_root = _comfy_cache_root()
+    cache_root.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_root / _slug_from_repo(repo)
+
+    if not (cache_path / ".git").exists():
+        if offline:
+            raise RuntimeError(
+                f"Offline режим: отсутствует кеш репозитория {repo}, требуется предварительная синхронизация"
+            )
+        code, out, err = run_command(["git", "clone", repo, str(cache_path)])
+        if code != 0:
+            raise RuntimeError(f"Не удалось клонировать репозиторий {repo}: {err or out}")
+    elif not offline:
+        run_command(["git", "-C", str(cache_path), "fetch", "--all", "--tags", "-q"])
+
+    return cache_path
+
+
+def _checkout_from_cache(
+    *,
+    cache_repo: pathlib.Path,
+    target_repo: pathlib.Path,
+    commit: Optional[str],
+    offline: bool,
+) -> None:
+    if target_repo.exists() and not (target_repo / ".git").exists():
+        shutil.rmtree(target_repo)
+
+    if not target_repo.exists():
+        target_repo.parent.mkdir(parents=True, exist_ok=True)
+        clone_args = ["git", "clone", "--shared", str(cache_repo), str(target_repo)]
+        code, out, err = run_command(clone_args)
+        if code != 0:
+            raise RuntimeError(f"Не удалось подготовить рабочую копию ComfyUI: {err or out}")
+
+    # Убедиться, что commit присутствует в кешовом репозитории
+    if commit:
+        code, _, _ = run_command(["git", "-C", str(cache_repo), "cat-file", "-e", f"{commit}^{{commit}}"])
+        if code != 0:
+            if offline:
+                raise RuntimeError(
+                    f"Offline режим: коммит {commit} отсутствует в кешовом репозитории {cache_repo}"
+                )
+            raise RuntimeError(f"Коммит {commit} отсутствует в кешовом репозитории {cache_repo}")
+
+    # Обновить локальную копию из кеша (без обращения в сеть)
+    run_command(["git", "-C", str(target_repo), "remote", "set-url", "origin", str(cache_repo)])
+    run_command(["git", "-C", str(target_repo), "fetch", "origin", "--tags", "-q"])
+
+    checkout_target = commit or "HEAD"
+    code, out, err = run_command(["git", "-C", str(target_repo), "checkout", "--force", checkout_target])
+    if code != 0:
+        raise RuntimeError(f"Не удалось переключиться на {checkout_target} в {target_repo}: {err or out}")
+    run_command(["git", "-C", str(target_repo), "reset", "--hard", checkout_target])
+    run_command(["git", "-C", str(target_repo), "clean", "-fdx"])
 
 
 def _ensure_symlink(src: pathlib.Path, dst: pathlib.Path) -> None:
@@ -363,7 +428,7 @@ def resolve_version_spec(spec_path: pathlib.Path, offline: bool = False) -> Dict
 
 def save_resolved_lock(resolved: Dict[str, object]) -> pathlib.Path:
     version_id = str(resolved.get("version_id") or "version")
-    out_path = pathlib.Path(os.path.expanduser(f"~/.comfy-cache/resolved/{version_id}.lock.json"))
+    out_path = resolved_cache_dir() / f"{version_id}.lock.json"
     _safe_write_json(out_path, resolved)
     log_info(f"Resolved-lock saved: {out_path}")
     return out_path
@@ -387,7 +452,6 @@ def realize_from_resolved(
     (comfy_home / "ComfyUI").mkdir(parents=True, exist_ok=True)
     (comfy_home / "ComfyUI" / "custom_nodes").mkdir(parents=True, exist_ok=True)
     models_dir.mkdir(parents=True, exist_ok=True)
-    (comfy_home / "models").mkdir(parents=True, exist_ok=True)
 
     # Clone or update ComfyUI
     comfy = resolved.get("comfy") or {}
@@ -396,20 +460,16 @@ def realize_from_resolved(
     if not isinstance(repo, str) or not repo:
         raise RuntimeError("Resolved comfy.repo is required")
     repo_dir = comfy_home / "ComfyUI"
-    if not (repo_dir / ".git").exists():
-        if offline:
-            raise RuntimeError(
-                f"Offline режим: репозиторий ComfyUI отсутствует по пути {repo_dir}"
-            )
-        code, out, err = run_command(["git", "clone", repo, str(repo_dir)])
-        if code != 0:
-            raise RuntimeError(f"Failed to clone ComfyUI: {err or out}")
-    if isinstance(commit, str) and commit:
-        if not offline:
-            run_command(["git", "-C", str(repo_dir), "fetch", "--all", "--tags", "-q"])  # best-effort
-        code, out, err = run_command(["git", "-C", str(repo_dir), "checkout", commit])
-        if code != 0:
-            log_warn(f"Failed to checkout commit {commit} for ComfyUI: {err or out}")
+    cache_repo = _ensure_repo_cache(repo, offline=offline)
+    try:
+        _checkout_from_cache(
+            cache_repo=cache_repo,
+            target_repo=repo_dir,
+            commit=commit,
+            offline=offline,
+        )
+    except RuntimeError as exc:
+        raise RuntimeError(f"Не удалось подготовить ComfyUI в {repo_dir}: {exc}")
 
     # Autoinstall ComfyUI requirements
     py = _venv_python_from_env() or _select_python_executable()

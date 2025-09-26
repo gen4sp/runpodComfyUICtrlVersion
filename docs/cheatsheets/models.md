@@ -19,10 +19,10 @@ python3 scripts/validate_yaml_models.py --yaml models/flux-models.yml --models-d
 python3 scripts/validate_yaml_models.py --yaml models/wan22-fast-models.yml --models-dir "$COMFY_HOME/models" --validate-only
 ```
 
-## Верификация моделей из lock-файла
+## Верификация моделей из спецификации
 
 ```bash
-python3 scripts/verify_models.py --lock lockfiles/comfy-my-version.lock.json --models-dir "$COMFY_HOME/models"
+python3 scripts/verify_models.py --models-dir "$MODELS_DIR" --verbose
 ```
 
 ## Восстановление отсутствующих моделей
@@ -40,7 +40,7 @@ python3 scripts/verify_models.py --lock lockfiles/comfy-my-version.lock.json --m
 -   `--workers N` — количество параллельных потоков (по умолчанию: 4)
 -   `--timeout SEC` — таймаут загрузки (по умолчанию: 120)
 
-> **Предупреждение**: Кеш не используется и не рекомендуется. Все модели скачиваются напрямую в директорию назначения.
+> **Предупреждение**: Кеш моделей единый (`COMFY_CACHE_ROOT/models`). Модели скачиваются один раз и линкуются в целевую директорию.
 
 ## Параметры verify_models.py
 

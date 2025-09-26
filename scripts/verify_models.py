@@ -34,6 +34,8 @@ import urllib.parse
 import urllib.request
 from typing import Dict, Iterable, List, Optional, Tuple
 
+from rp_handler.cache import models_cache_dir
+
 
 # ----------------------------- Small utilities ----------------------------- #
 
@@ -125,34 +127,12 @@ def run_command(command: List[str]) -> Tuple[int, str, str]:
 # ----------------------------- Cache management ----------------------------- #
 
 
-_CACHE_ENV_VARS = ("COMFY_CACHE_MODELS", "COMFY_MODELS_CACHE")
 _CACHE_DISABLE_ENV = ("COMFY_DISABLE_MODEL_CACHE", "COMFY_MODELS_CACHE_DISABLE")
 _DEFAULT_TIMEOUT = int(os.environ.get("COMFY_MODELS_TIMEOUT", "180"))
 
 
 def _cache_root() -> pathlib.Path:
-    for env_var in _CACHE_ENV_VARS:
-        value = os.environ.get(env_var)
-        if value:
-            return pathlib.Path(value).expanduser().resolve()
-
-    candidates = []
-    runpod_volume = pathlib.Path("/runpod-volume")
-    if runpod_volume.exists():
-        candidates.append(runpod_volume / "cache" / "models")
-    workspace = pathlib.Path("/workspace")
-    if workspace.exists():
-        candidates.extend([
-            workspace / "cache" / "models",
-            workspace / "models-cache",
-        ])
-    candidates.append(pathlib.Path(os.path.expanduser("~/.comfy-cache/models")))
-
-    for candidate in candidates:
-        parent = candidate.parent
-        if parent.exists() or candidate == candidates[-1]:
-            return candidate.resolve()
-    return pathlib.Path(os.path.expanduser("~/.comfy-cache/models")).resolve()
+    return models_cache_dir()
 
 
 def cache_enabled(force: Optional[bool] = None) -> bool:

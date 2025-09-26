@@ -23,17 +23,7 @@ export COMFY_HOME="$HOME/comfy"
 ./scripts/init_comfyui.sh --install-torch auto
 ```
 
-2. Создание версии (lock beta) — по желанию, чтобы зафиксировать текущую установку:
-
-```bash
-python3 scripts/create_version.py \
-  --name "wan22-fast" \
-  --comfy-path "$COMFY_HOME" \
-  --models-spec ./models/wan22-fast-models.yml \
-  --pretty
-```
-
-3. Оформите спецификацию версии `versions/my-version.json` (schema v2):
+2. Создайте спецификацию версии `versions/my-version.json` (schema v2):
 
 ```json
 {
@@ -48,13 +38,13 @@ python3 scripts/create_version.py \
 }
 ```
 
-4. Развернуть окружение версии (создаст изолированный `.venv`, подтянет ноды и модели):
+3. Развернуть окружение версии (создаст изолированный `.venv`, подтянет ноды и модели):
 
 ```bash
 python3 scripts/realize_version.py --version-id "wan22-fast"
 ```
 
-5. Запустить workflow локально через handler:
+4. Запустить workflow локально через handler:
 
 ```bash
 ./scripts/run_handler_local.sh \
@@ -66,6 +56,12 @@ python3 scripts/realize_version.py --version-id "wan22-fast"
 ### Команды высокого уровня (Version CLI)
 
 ```bash
+# Сгенерировать новую спецификацию
+python3 scripts/version.py create my-version \
+  --repo https://github.com/comfyanonymous/ComfyUI@master \
+  --nodes https://github.com/comfyanonymous/ComfyUI-Custom-Scripts@main \
+  --models '{"source": "https://example.com/model.safetensors", "target_subdir": "checkpoints"}'
+
 # Разрешить ссылки (ref → commit) и сохранить resolved-lock
 python3 scripts/version.py resolve my-version
 

@@ -6,9 +6,9 @@
 
 -   schema_version в `versions/*.json` — введён (`schema_version: 2`), пример обновлён (`versions/test-ver.json`)
 -   Пиннинг: `repo` + опциональный `ref`; `commit` резолвится при первом запуске (`rp_handler.resolver.resolve_version_spec`)
--   Resolved‑lock сохраняем в `~/.comfy-cache/resolved/<version_id>.lock.json` (`save_resolved_lock`)
--   Модели: checksum не обязателен; ключ — URL; «одно место» через `MODELS_DIR`/`extra_model_paths` (дефолт `$COMFY_HOME/models`)
--   Кастом‑ноды: «чистые» коммиты; кеш `<repo>@<commit>`; в версию — symlink (кеш по умолчанию: `/workspace/custom_nodes/workspace` или `~/.comfy-cache/custom_nodes`)
+-   Resolved‑lock сохраняем в `~/.cache/runpod-comfy/resolved/<version_id>.lock.json` (`save_resolved_lock`)
+-   Модели: checksum не обязателен; ключ — URL; «одно место» через единый кеш (`COMFY_CACHE_ROOT/models`, дефолт `~/.cache/runpod-comfy/models`), в версии — только symlink
+-   Кастом‑ноды: «чистые» коммиты; кеш `<repo>@<commit>` хранится под `COMFY_CACHE_ROOT/custom_nodes`; в версию — symlink
 -   Offline: допускаем частичные загрузки; symlink разрешены (при offline отсутствующие модели — warn)
 -   Обратную совместимость с `--lock` — убрана из handler/скриптов; интерфейс теперь `--version-id/--spec`
 
@@ -35,8 +35,8 @@
 -   `realize_version.py` принимает новую спецификацию (`--version-id/--spec`), делает резолв + realize без `lock`
 -   `COMFY_HOME=/runpod-volume/comfy-<version_id>` по умолчанию, создаёт отдельный `.venv`
 -   Автосбор зависимостей ядра и кастом-нода (requirements/pyproject) с поддержкой wheels через `--wheels-dir`
--   Кастом‑ноды клонируются в кеш `<repo>@<commit>`, в `COMFY_HOME/custom_nodes/<name>` создаются symlink'и
--   Модели загружаются в общий `MODELS_DIR` без дублирования
+-   Кастом‑ноды клонируются в кеш `<repo>@<commit>` под `COMFY_CACHE_ROOT/custom_nodes`, в `COMFY_HOME/custom_nodes/<name>` создаются symlink'и
+-   Модели загружаются в общий `MODELS_DIR` и линкуются из кеша (`COMFY_CACHE_ROOT/models`)
 -   Генерируется и подключается `extra_model_paths.yaml`
 -   Офлайн-режим использует локальные данные, отсутствующее помечается предупреждениями
 

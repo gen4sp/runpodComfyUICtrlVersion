@@ -57,211 +57,58 @@ source "$COMFY_HOME/.venv/bin/activate"
 python "$COMFY_HOME/ComfyUI/main.py"
 ```
 
-### Создание lock-версии
+### Создание спецификации версии (schema v2)
 
-Сгенерируйте lock-файл, зафиксировав SHA/версии ComfyUI, custom nodes, Python-зависимости и модели:
-
-```bash
-python3 scripts/create_version.py --name "$COMFY_VERSION_NAME" \
-  --comfy-repo https://github.com/comfyanonymous/ComfyUI \
-  --custom-node repo=https://github.com/author/custom-node.git,name=custom-node \
-  --requirements ./requirements.txt \
-  --models-spec ./models/spec.yml \
-  --pretty
-```
-
-По умолчанию скрипт ищет пути на основе `COMFY_HOME`:
-
--   `ComfyUI` по адресу: `$COMFY_HOME` (если это git‑репозиторий; иначе используется `$COMFY_HOME/ComfyUI`, либо можно указать явный `--comfy-path`).
--   `venv` для `pip freeze`: `$COMFY_HOME/.venv` (если не задано `--venv`).
--   базовый каталог моделей: `$COMFY_HOME/models` (используется только для экспансии путей в чек‑суммах).
-
-Ключевые параметры:
-
--   `--name` — имя версии (попадает в `lockfiles/comfy-<name>.lock.json`).
--   `--comfy-path` — путь к локальному репозиторию ComfyUI (git). Если не указан, берется `$COMFY_HOME/ComfyUI`.
--   `--comfy-repo` — URL репозитория для метаданных (необязательно, если есть git remote `origin`).
--   `--custom-node` — повторы вида `name=...,path=...,repo=...,commit=...`. Можно указывать несколько раз. Локальный `path` позволяет autodiscovery commit/remote.
--   `--venv` — путь к venv; если задан/найден venv, зависимости берутся через `pip freeze`.
--   `--requirements` — альтернативно можно указать pinned `requirements.txt` (используется, если нет venv).
--   `--models-spec` — YAML/JSON со списком моделей. Формат: список объектов или `{ models: [...] }`, где элемент: `{ name, source?, target_path, checksum? }`.
--   `--wheel-url name=url` — можно повторять; подменяет `url` для пакета в Python-секции.
--   `--pretty` — человекочитаемый JSON (иначе компактный, стабильно отсортированный).
-
-Результат: `lockfiles/comfy-$COMFY_VERSION_NAME.lock.json`.
-
-Детерминизм: скрипт не добавляет временных меток; коллекции сортируются по стабильным ключам; повторный запуск при неизменных входных дает идентичный вывод.
-
-### Верификация и скачивание моделей
+Все операции строятся вокруг `versions/<id>.json`. Для генерации используйте CLI:
 
 ```bash
-python3 scripts/verify_models.py --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json \
-  --models-dir "$COMFY_HOME/models"
+python3 scripts/version.py create "$COMFY_VERSION_NAME" \
+  --repo https://github.com/comfyanonymous/ComfyUI@main \
+  --nodes https://github.com/comfyanonymous/ComfyUI-Custom-Scripts@main \
+  --models '{"source": "https://example.com/model.safetensors", "target_subdir": "checkpoints"}'
 ```
 
-Параметры:
+Аргументы:
 
--   `--cache-dir PATH` — директория кэша артефактов (по умолчанию: `$COMFY_HOME/.cache/models`).
--   `--overwrite` — перезаписывать целевой файл, если checksum не совпадает и есть `source` в lock-файле.
--   `--timeout SEC` — таймаут сетевых загрузок (по умолчанию 120 сек).
--   `--verbose` — подробный вывод статуса по каждой модели.
+-   `--repo` — обязательный. URL ядра ComfyUI с опциональным `@ref`. Реф резолвится в commit через `git ls-remote`.
+-   `--nodes` — повторяемый. Принимает JSON-объект, путь к файлу или строку `<repo>@<ref>`. Если `commit` не указан, вычисляется автоматически.
+-   `--models` — повторяемый. Принимает JSON-объект или файл со списком объектов. Поля: `source`, `target_subdir?`, `target_path?`, `name?`, `checksum?`.
+-   `--models-root` — директория с локальными моделями для авто-расчёта checksum.
+-   `--auto-checksum` — если задан, для найденных локальных файлов вычисляется `sha256`.
+-   `--output` — путь к файлу (по умолчанию `versions/<id>.json`).
 
-Поддерживаемые источники `source` в lock-файле:
-
--   **http/https** — прямые ссылки на файлы.
--   **file** — локальные пути или `file:///...`.
--   **gs://...** — требуется установленный `gsutil` (Google Cloud SDK).
--   **hf://...** или **huggingface://...** — файлы из репозиториев Hugging Face. Поддерживаются публичные и приватные репозитории (через токен).
--   **civitai://...** — модели из репозитория Civitai (через токен).
-
-Hugging Face источники (`hf://`):
-
--   Формат URL:
-
-    -   `hf://<org>/<repo>@<rev>/<path/inside/repo>`
-    -   `hf://<org>/<repo>/<path/inside/repo>?rev=<rev>`
-
--   Ревизия `<rev>` по умолчанию `main`.
--   Для приватных репозиториев укажите токен в окружении: `HF_TOKEN`.
--   Примеры:
-
-    ```bash
-    # Публичный файл по конкретному коммиту
-    hf://stabilityai/stable-diffusion-2-1@<commit-sha>/v1-5-pruned.safetensors
-
-    # С ревизией через query
-    hf://runwayml/stable-diffusion-v1-5/v1-5-pruned.safetensors?rev=main
-
-    # Приватный репозиторий (токен из окружения)
-    export HF_TOKEN="hf_..."
-    hf://myorg/private-model@v1.0/model.safetensors
-    ```
-
-Пример секции `models` в lock-файле с Hugging Face:
+Пример результата:
 
 ```json
 {
+    "schema_version": 2,
+    "version_id": "demo",
+    "comfy": {
+        "repo": "https://github.com/comfyanonymous/ComfyUI",
+        "ref": "main",
+        "commit": "<resolved-sha>"
+    },
+    "custom_nodes": [
+        {
+            "name": "ComfyUI-Custom-Scripts",
+            "repo": "https://github.com/comfyanonymous/ComfyUI-Custom-Scripts",
+            "ref": "main",
+            "commit": "<resolved-sha>"
+        }
+    ],
     "models": [
         {
-            "name": "sd15",
-            "source": "hf://runwayml/stable-diffusion-v1-5/v1-5-pruned.safetensors?rev=main",
-            "target_path": "$MODELS_DIR/checkpoints/sd15.safetensors",
-            "checksum": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+            "name": "model.safetensors",
+            "source": "https://example.com/model.safetensors",
+            "target_subdir": "checkpoints",
+            "target_path": "checkpoints/model.safetensors",
+            "checksum": "sha256:..."
         }
-    ]
+    ],
+    "env": {},
+    "options": {}
 }
 ```
-
-Civitai источники (`civitai://`):
-
--   Формат URL:
-
-    -   `civitai://models/<model_id>`
-    -   `civitai://api/download/models/<model_id>`
-
--   Для доступа к моделям укажите токен в окружении: `CIVITAI_TOKEN`.
--   Примеры:
-
-    ```bash
-    # Скачивание модели по ID
-    export CIVITAI_TOKEN="..."
-    civitai://models/12345
-
-    # Прямой URL скачивания
-    civitai://api/download/models/12345
-    ```
-
-Пример секции `models` в lock-файле с Civitai:
-
-```json
-{
-    "models": [
-        {
-            "name": "my-civitai-model",
-            "source": "civitai://models/12345",
-            "target_path": "$MODELS_DIR/models/my-model.safetensors",
-            "checksum": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-        }
-    ]
-}
-```
-
-Подстановка переменных в `target_path`:
-
--   Поддерживаются `$COMFY_HOME` и `$MODELS_DIR` (последний можно задать флагом `--models-dir`).
-
-Пример восстановления удаленного файла:
-
-```bash
-rm "$COMFY_HOME/models/path/to/model.safetensors"
-python3 scripts/verify_models.py \
-  --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json \
-  --models-dir "$COMFY_HOME/models" \
-  --verbose
-```
-
-### Пиновка зависимостей
-
-Перевести гибкий `requirements.txt` в детерминированный список для lock-файла:
-
-```bash
-python3 scripts/pin_requirements.py \
-  --requirements ./requirements.txt \
-  --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json \
-  --in-place \
-  --pretty
-```
-
-Оффлайн-пиновка при наличии wheel-артефактов:
-
-```bash
-python3 scripts/pin_requirements.py \
-  --requirements ./requirements.txt \
-  --offline --wheels-dir /path/to/wheels \
-  --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json \
-  --in-place
-```
-
-Можно явно задать wheel-URL для отдельных пакетов (перезаписывает auto-URL из freeze):
-
-```bash
-python3 scripts/pin_requirements.py \
-  --requirements ./requirements.txt \
-  --wheel-url torch=https://download.pytorch.org/whl/cpu/torch-...whl \
-  --wheel-url torchvision=https://download.pytorch.org/whl/cpu/torchvision-...whl \
-  --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json --in-place
-```
-
-#### Torch/CUDA через lock-файл
-
-Рекомендуется фиксировать колёса `torch*` (и совместимые пакеты) через `--wheel-url` или заранее в `requirements.txt` с `name @ url`.
-
-Примеры (GPU, CUDA 12.4):
-
-```bash
-python3 scripts/pin_requirements.py \
-  --requirements ./requirements.txt \
-  --wheel-url torch=https://download.pytorch.org/whl/cu124/torch-<ver>-cp311-cp311-linux_x86_64.whl \
-  --wheel-url torchvision=https://download.pytorch.org/whl/cu124/torchvision-<ver>-cp311-cp311-linux_x86_64.whl \
-  --wheel-url xformers=https://download.pytorch.org/whl/cu124/xformers-<ver>-cp311-cp311-linux_x86_64.whl \
-  --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json --in-place --pretty
-```
-
-Примеры (CPU):
-
-```bash
-python3 scripts/pin_requirements.py \
-  --requirements ./requirements.txt \
-  --wheel-url torch=https://download.pytorch.org/whl/cpu/torch-<ver>-cp311-cp311-manylinux2014_x86_64.whl \
-  --wheel-url torchvision=https://download.pytorch.org/whl/cpu/torchvision-<ver>-cp311-cp311-manylinux2014_x86_64.whl \
-  --lock lockfiles/comfy-$COMFY_VERSION_NAME.lock.json --in-place --pretty
-```
-
-Во время применения lock-файла `resolver` установит пакеты точно по URL, обеспечивая воспроизводимость для нужного CUDA/CPU профиля.
-
-### Клонирование версии (устарело)
-
-Ранее использовался `clone_version.sh` на основе lock-файла. В новой схеме используйте `realize_version.py` с `--version-id/--spec`.
 
 ### Реализация версии (schema_v2)
 
@@ -286,7 +133,7 @@ python3 scripts/realize_version.py \
   --wheels-dir /workspace/wheels
 ```
 
-Результат: создаётся кеш `~/.comfy-cache/resolved/<version_id>.lock.json`, готовится `COMFY_HOME` с `.venv`, ядро и кастом-ноды чек-аутятся по коммитам, модели подтягиваются в единый `MODELS_DIR` (можно переопределить флагом), рядом генерируется `extra_model_paths.yaml`. Команда `--dry-run` печатает план и завершает работу без изменений. При указании `--wheels-dir` все установки выполняются с `--no-index --find-links`.
+Результат: создаётся кеш `~/.cache/runpod-comfy/resolved/<version_id>.lock.json` (переменная `COMFY_CACHE_ROOT`), готовится `COMFY_HOME` с `.venv`. Ядро и кастом-ноды подтягиваются из общего кеша `<slug>@<commit>`, модели складываются в общий `MODELS_DIR` и линкуются в версию. Рядом генерируется `extra_model_paths.yaml`. Команда `--dry-run` печатает план; `--wheels-dir` включает установку с `--no-index --find-links`.
 
 ### Удаление версии
 
@@ -427,3 +274,30 @@ python3 scripts/repro_workflow_hash.py \
       --workflow workflows/minimal.json \
       --output gcs | cat
     ```
+
+### Верификация и скачивание моделей
+
+```bash
+python3 scripts/verify_models.py --models-dir "$MODELS_DIR" --verbose
+```
+
+Скрипт использует единый кэш моделей (`$COMFY_CACHE_ROOT/models`, либо `COMFY_CACHE_MODELS`). При несовпадении checksum модель докачивается и помещается в целевой каталог, затем создаётся symlink. `--lock` больше не требуется — модели берутся из спецификации версии.
+
+Параметры:
+
+-   `--models-dir DIR` — базовая директория моделей (по умолчанию `$COMFY_HOME/models`).
+-   `--overwrite` — перезаписать при несовпадении checksum.
+-   `--timeout SEC` — таймаут сетевых загрузок (по умолчанию 120).
+-   `--verbose` — подробный вывод.
+
+Поддерживаемые источники `source`:
+
+-   `http(s)`
+-   `file:///` и относительные пути
+-   `gs://` (требуется `gsutil`)
+-   `hf://` (`huggingface://`) — токен `HF_TOKEN` для приватных репозиториев
+-   `civitai://` — токен `CIVITAI_TOKEN`
+
+### Пиновка Python-зависимостей
+
+Инструменты lock v1 (`create_version.py`, `pin_requirements.py`) более не используются. Зависимости можно устанавливать вручную через `requirements.txt` или wheel-артефакты, а кеширование реализовано на уровне `pip`.

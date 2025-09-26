@@ -1,56 +1,8 @@
 # Установка кастом нод и зависимостей
 
 ```bash
-
 python3 scripts/validate_json_nodes.py --install-reqs --verbose
-
 ```
-
-## Пиновка зависимостей из requirements.txt
-
-```bash
-python3 scripts/pin_requirements.py --requirements ./requirements.txt --lock lockfiles/comfy-my-version.lock.json --in-place --pretty
-```
-
-## Пиновка с явными URL для Torch (GPU CUDA 12.4)
-
-```bash
-python3 scripts/pin_requirements.py \
-  --requirements ./requirements.txt \
-  --wheel-url torch=https://download.pytorch.org/whl/cu124/torch-2.3.0%2Bcu124-cp311-cp311-linux_x86_64.whl \
-  --wheel-url torchvision=https://download.pytorch.org/whl/cu124/torchvision-0.18.0%2Bcu124-cp311-cp311-linux_x86_64.whl \
-  --wheel-url xformers=https://download.pytorch.org/whl/cu124/xformers-0.0.26-cp311-cp311-linux_x86_64.whl \
-  --lock lockfiles/comfy-my-version.lock.json --in-place --pretty
-```
-
-## Пиновка для CPU
-
-```bash
-python3 scripts/pin_requirements.py \
-  --requirements ./requirements.txt \
-  --wheel-url torch=https://download.pytorch.org/whl/cpu/torch-2.3.0%2Bcpu-cp311-cp311-manylinux2014_x86_64.whl \
-  --wheel-url torchvision=https://download.pytorch.org/whl/cpu/torchvision-0.18.0%2Bcpu-cp311-cp311-manylinux2014_x86_64.whl \
-  --lock lockfiles/comfy-my-version.lock.json --in-place --pretty
-```
-
-## Оффлайн пиновка с локальными wheels
-
-```bash
-python3 scripts/pin_requirements.py \
-  --requirements ./requirements.txt \
-  --offline --wheels-dir /path/to/wheels \
-  --lock lockfiles/comfy-my-version.lock.json --in-place
-```
-
-## Параметры pin_requirements.py
-
--   `--requirements FILE` — файл с зависимостями (обязательно)
--   `--lock FILE` — выходной lock-файл
--   `--in-place` — обновить существующий lock-файл
--   `--pretty` — человекочитаемый JSON
--   `--offline` — оффлайн режим (только локальные wheels)
--   `--wheels-dir DIR` — директория с wheel-артефактами
--   `--wheel-url name=url` — подмена URL для пакета (можно повторять)
 
 ## Установка кастом нод вручную
 
@@ -78,8 +30,7 @@ pip install -r requirements.txt
 
 ```bash
 cd "$COMFY_HOME"
-source .venv/bin/activate
-python -c "import custom_nodes.ComfyUI-GGUF; print('GGUF node loaded')"
+python3 scripts/validate_json_nodes.py --validate-only --verbose
 ```
 
 ## Обновление кастом нод
