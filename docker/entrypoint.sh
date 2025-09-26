@@ -11,26 +11,15 @@ log_ok() { printf "%b[OK]%b %s\n" "$GREEN" "$NC" "$*"; }
 : "${COMFY_HOME:=/opt/comfy}"
 : "${MODELS_DIR:=/opt/comfy/models}"
 
-LOCK_PATH_DEFAULT="/app/lockfiles/comfy-${COMFY_VERSION_NAME:-default}.lock.json"
-LOCK_PATH="${LOCK_PATH:-$LOCK_PATH_DEFAULT}"
-
 log_info "COMFY_HOME=$COMFY_HOME"
 log_info "MODELS_DIR=$MODELS_DIR"
-log_info "LOCK_PATH=$LOCK_PATH"
+SPEC_PATH_DEFAULT="/app/versions/${COMFY_VERSION_NAME:-default}.json"
+SPEC_PATH="${VERSION_SPEC_PATH:-$SPEC_PATH_DEFAULT}"
+log_info "VERSION_SPEC_PATH=$SPEC_PATH"
 
-if [ ! -f "$LOCK_PATH" ]; then
-  log_warn "Lock-файл не найден: $LOCK_PATH"
-  if [ -n "${COMFY_VERSION_NAME:-}" ]; then
-    alt="/app/lockfiles/comfy-$COMFY_VERSION_NAME.lock.json"
-    if [ -f "$alt" ]; then
-      LOCK_PATH="$alt"
-      log_info "Нашёл альтернативный lock-файл: $LOCK_PATH"
-    fi
-  fi
-fi
-
-if [ ! -f "$LOCK_PATH" ]; then
-  log_warn "Запуск без lock-файла. Доступны команды handler для справки."
+if [ ! -f "$SPEC_PATH" ]; then
+  log_warn "Spec-файл не найден: $SPEC_PATH"
+  log_warn "Передайте --version-id или смонтируйте versions/<id>.json"
 fi
 
 exec python -m rp_handler.main "$@"

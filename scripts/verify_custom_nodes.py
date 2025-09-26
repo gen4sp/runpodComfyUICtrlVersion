@@ -2,7 +2,7 @@
 """
 Скрипт для восстановления кастом-нод из lock-файлов.
 
-Читает lockfiles/comfy-*.lock.json и восстанавливает custom_nodes секцию.
+Читает resolved-lock (`~/.cache/runpod-comfy/resolved/<id>.lock.json`) и восстанавливает custom_nodes секцию.
 """
 
 import argparse
@@ -12,6 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+from rp_handler.cache import resolved_cache_dir
 
 
 class LockFileVerifier:
@@ -290,15 +292,11 @@ def main():
     if args.lock_files:
         lock_files = [Path(f) for f in args.lock_files]
     else:
-        lockfiles_dir = Path("lockfiles")
-        if lockfiles_dir.exists():
-            lock_files = list(lockfiles_dir.glob("comfy-*.lock.json"))
-        else:
-            print("Ошибка: каталог 'lockfiles' не найден и файлы не указаны")
-            sys.exit(1)
-    
+        resolved_dir = resolved_cache_dir()
+        lock_files = list(resolved_dir.glob("*.lock.json"))
+
     if not lock_files:
-        print("Ошибка: не найдено lock файлов для обработки")
+        print("Ошибка: не найдено resolved-lock файлов. Укажите --lock-files или выполните scripts/version.py validate")
         sys.exit(1)
     
     verifier = LockFileVerifier(args.comfy_home, args.verbose)

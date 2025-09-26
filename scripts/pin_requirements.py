@@ -12,17 +12,17 @@ Features:
 Usage examples:
   python3 scripts/pin_requirements.py \
     --requirements requirements.txt \
-    --output lockfiles/python-packages.json
+    --output versions/python-packages.json
 
   python3 scripts/pin_requirements.py \
     --requirements requirements.txt \
-    --lock lockfiles/comfy-foo.lock.json --in-place
+    --lock ~/.cache/runpod-comfy/resolved/comfy-foo.lock.json --in-place
 
 Offline pinning using wheel artifacts:
   python3 scripts/pin_requirements.py \
     --requirements requirements.txt \
     --wheels-dir /path/to/wheels --offline \
-    --lock lockfiles/comfy-foo.lock.json --in-place
+    --lock ~/.cache/runpod-comfy/resolved/comfy-foo.lock.json --in-place
 """
 
 from __future__ import annotations

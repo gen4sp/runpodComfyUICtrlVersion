@@ -30,7 +30,7 @@ RUN apt-get update -y && \
 # Копируем скрипты и handler внутрь образа
 COPY scripts/ /app/scripts/
 COPY rp_handler/ /app/rp_handler/
-COPY lockfiles/ /app/lockfiles/
+COPY versions/ /app/versions/
 
 # Создаём директории для COMFY_HOME и моделей
 RUN mkdir -p "$COMFY_HOME" "$MODELS_DIR"

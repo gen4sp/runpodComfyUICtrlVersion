@@ -1,126 +1,90 @@
-## ComfyUI Version Control — 1‑Page Manual
+## ComfyUI Version Control — Manual
 
-Краткое руководство по воспроизводимым версиям ComfyUI для локальной работы, Docker и RunPod. Все операции базируются на единой спецификации `versions/<id>.json` (schema v2).
+Минимальный гид по работе со спецификациями `versions/<id>.json` и единым CLI `scripts/version.py`.
 
 ### Предусловия
 
--   Python 3.11+ и `venv`
--   Docker (для контейнера)
--   macOS/Linux или RunPod (Pods/serverless)
+-   Python 3.11+
+-   Git
+-   Доступ к интернету для первичного скачивания
+-   (Опционально) Docker/RunPod для развёртывания
 
 ### Основные сущности
 
--   `versions/<id>.json` — спецификация версии (ядро, кастом‑ноды, модели, опции)
--   `COMFY_HOME` — директория окружения версии (создаётся при развертке)
--   `MODELS_DIR` — директория моделей (по умолчанию `$COMFY_HOME/models`)
+-   `versions/<id>.json` — описание версии (ядро, кастом-ноды, модели, опции).
+-   `COMFY_HOME` — каталог развёрнутой версии (по умолчанию `/runpod-volume/comfy-<id>` или `~/comfy-<id>`).
+-   `MODELS_DIR` — каталог моделей. По умолчанию общий кеш `COMFY_CACHE_ROOT/models`.
 
-### Быстрый старт
+### Шаги
 
-1. Инициализация ComfyUI (опционально, для локальной разработки):
+1. **Создание спецификации**
 
-```bash
-export COMFY_HOME="$HOME/comfy"
-./scripts/init_comfyui.sh --install-torch auto
-```
+    ```bash
+    python3 scripts/version.py create demo \
+      --repo https://github.com/comfyanonymous/ComfyUI@master \
+      --nodes custom_nodes.json \
+      --models models.json
+    ```
 
-2. Создайте спецификацию версии `versions/my-version.json` (schema v2):
+    Получится `versions/demo.json` со всеми параметрами.
 
-```json
-{
-    "schema_version": 2,
-    "version_id": "my-version",
-    "comfy": {
-        "repo": "https://github.com/comfyanonymous/ComfyUI",
-        "ref": "master"
-    },
-    "custom_nodes": [],
-    "models": []
-}
-```
+2. **Проверка и резолвинг**
 
-3. Развернуть окружение версии (создаст изолированный `.venv`, подтянет ноды и модели):
+    ```bash
+    python3 scripts/version.py validate demo
+    ```
 
-```bash
-python3 scripts/realize_version.py --version-id "wan22-fast"
-```
+    Команда резолвит SHA, сохраняет `~/.cache/runpod-comfy/resolved/demo.lock.json` и печатает план.
 
-4. Запустить workflow локально через handler:
+3. **Развёртывание окружения**
 
-```bash
-./scripts/run_handler_local.sh \
-  --version-id "wan22-fast" \
-  --workflow ./workflows/minimal.json \
-  --output base64
-```
+    ```bash
+    python3 scripts/version.py realize demo --target /runpod-volume/comfy-demo
+    ```
 
-### Команды высокого уровня (Version CLI)
+    Скрипт клонирует ComfyUI и кастом-ноды в кеш, создаёт симлинки моделей, устанавливает `requirements.txt`.
 
-```bash
-# Сгенерировать новую спецификацию
-python3 scripts/version.py create my-version \
-  --repo https://github.com/comfyanonymous/ComfyUI@master \
-  --nodes https://github.com/comfyanonymous/ComfyUI-Custom-Scripts@main \
-  --models '{"source": "https://example.com/model.safetensors", "target_subdir": "checkpoints"}'
+4. **Запуск UI**
 
-# Разрешить ссылки (ref → commit) и сохранить resolved-lock
-python3 scripts/version.py resolve my-version
+    ```bash
+    python3 scripts/version.py run-ui demo --port 9000
+    ```
 
-# Развернуть окружение (план → установка)
-python3 scripts/version.py realize my-version --dry-run
-python3 scripts/version.py realize my-version
+    По умолчанию слушает `0.0.0.0:8188`. Любые аргументы после `--` передаются напрямую `ComfyUI/main.py`.
 
-# Протестировать выполнение workflow
-python3 scripts/version.py test my-version --workflow ./workflows/minimal.json --output base64
-```
+5. **Запуск handler (headless)**
 
-### Модели
+    ```bash
+    python3 scripts/version.py run-handler demo \
+      --workflow workflows/example.json \
+      --output base64 --out-file result.b64
+    ```
 
--   YAML примеры лежат в `models/*.yml`. Скачать/проверить можно:
+    Handler сам резолвит версию, использует общий кеш и возвращает результат (base64 или загрузка в GCS).
 
-```bash
-python3 scripts/verify_models.py --lock lockfiles/comfy-my-version.lock.json --models-dir "$COMFY_HOME/models"
-```
+6. **Управление версиями**
 
-HF/Civitai токены: `HF_TOKEN`, `CIVITAI_TOKEN`.
+    ```bash
+    python3 scripts/version.py clone demo demo-copy
+    python3 scripts/version.py delete demo --remove-spec
+    ```
 
-### Docker и RunPod
+### Полезные опции CLI
 
-Собрать образ:
+-   `--offline` — не обращаться к сети (если нужные кеши уже существуют).
+-   `--models-dir` — указать явный каталог моделей.
+-   `--wheels-dir` — каталог с wheel-ами для оффлайн-установки зависимостей.
+-   `--extra-args -- --no-auto-launch` — передать флаги напрямую ComfyUI.
 
-```bash
-./scripts/build_docker.sh --version "my-version" --tag runpod-comfy:local
-```
+### Переменные окружения
 
-Запуск внутри контейнера:
+-   `COMFY_HOME`, `MODELS_DIR` — переопределение стандартных путей.
+-   `COMFY_CACHE_ROOT` — базовый каталог кеша (`comfy`, `custom_nodes`, `models`, `resolved`).
+-   `COMFY_OFFLINE` — заставляет resolver/realizer работать без сети.
+-   `HF_TOKEN`, `CIVITAI_TOKEN` — токены для скачивания моделей.
 
-```bash
-docker run --rm \
-  -e COMFY_VERSION_NAME="my-version" \
-  runpod-comfy:local \
-  --help | cat
-```
+### Дальше
 
-Запуск handler в контейнере:
-
-```bash
-docker run --rm \
-  -e COMFY_VERSION_NAME="my-version" \
-  runpod-comfy:local \
-  --version-id "my-version" \
-  --workflow /app/workflows/minimal.json \
-  --output base64 | cat
-```
-
-RunPod Pods (volume): используйте `COMFY_HOME=/runpod-volume/comfy-<id>` и выполните `scripts/realize_version.py --version-id <id>` один раз на volume.
-
-### Полезные переменные окружения
-
--   `COMFY_HOME`, `MODELS_DIR`
--   `OUTPUT_MODE` = `gcs` | `base64` (по умолчанию `gcs`)
--   GCS: `GCS_BUCKET`, `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`/`GCS_PROJECT`, `GCS_PREFIX`
-
-### Где смотреть дальше
-
--   `docs/instructions.md` — подробные флаги и сценарии
--   `docs/cheatsheets/README.md` — быстрые команды по этапам
--   `docs/runpod.md` — специфично для RunPod
+-   `docs/instructions.md` — подробные сценарии RunPod/Docker.
+-   `docs/runpod.md` — специфичные настройки RunPod.
+-   `docs/smoketest.md` — чек-лист проверки.

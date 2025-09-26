@@ -6,15 +6,18 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import yaml
 import os
 import pathlib
+import shutil
 import subprocess
 import urllib.parse
 from typing import Any, Dict, List, Optional, Tuple
 
+import yaml
+
 from rp_handler import main as handler_main
 from rp_handler.main import spec_path_for_version
+from rp_handler.cache import resolved_cache_dir
 from rp_handler.resolver import (
     SpecValidationError,
     resolve_version_spec,
@@ -22,7 +25,11 @@ from rp_handler.resolver import (
     realize_from_resolved,
     _pick_default_comfy_home,
     _models_dir_default,
+    _venv_python_from_env,
+    _select_python_executable,
 )
+
+
 def _log_info(message: str) -> None:
     print(f"[INFO] {message}")
 
@@ -334,6 +341,15 @@ def _resolve_spec_path(version_id: str) -> pathlib.Path:
     return spec_path
 
 
+def _lock_path_for_version(version_id: str) -> pathlib.Path:
+    return resolved_cache_dir() / f"{version_id}.lock.json"
+
+
+def _update_runtime_env(comfy_home: pathlib.Path, models_dir: pathlib.Path) -> None:
+    os.environ["COMFY_HOME"] = str(comfy_home)
+    os.environ["MODELS_DIR"] = str(models_dir)
+
+
 def cmd_create(args: argparse.Namespace) -> int:
     repo, ref = _split_repo_ref(args.repo)
     try:
@@ -442,7 +458,97 @@ def cmd_realize(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_test(args: argparse.Namespace) -> int:
+def cmd_validate(args: argparse.Namespace) -> int:
+    try:
+        spec_path = _resolve_spec_path(args.version_id)
+        resolved, offline_effective = _prepare_resolved(spec_path, args.offline)
+    except FileNotFoundError as exc:
+        print(f"[ERROR] {exc}")
+        return 2
+    except SpecValidationError as exc:
+        print(f"[ERROR] {exc}")
+        return 2
+    except RuntimeError as exc:
+        print(f"[ERROR] {exc}")
+        return 2
+
+    lock_path = save_resolved_lock(resolved)
+
+    target = _pick_default_comfy_home(args.version_id)
+    plan_lines = _format_plan(resolved, target, None, offline_effective, None)
+    print("[OK] Spec resolved successfully")
+    for line in plan_lines:
+        print(line)
+    print(f"  resolved_lock: {lock_path}")
+    return 0
+
+
+def cmd_run_ui(args: argparse.Namespace) -> int:
+    try:
+        spec_path = _resolve_spec_path(args.version_id)
+        resolved, offline_effective = _prepare_resolved(spec_path, args.offline)
+    except FileNotFoundError as exc:
+        print(f"[ERROR] {exc}")
+        return 2
+    except SpecValidationError as exc:
+        print(f"[ERROR] {exc}")
+        return 2
+    except RuntimeError as exc:
+        print(f"[ERROR] {exc}")
+        return 2
+
+    target_path = pathlib.Path(args.target).resolve() if args.target else _pick_default_comfy_home(args.version_id)
+    models_override = pathlib.Path(args.models_dir).resolve() if args.models_dir else None
+    wheels_dir = pathlib.Path(args.wheels_dir).resolve() if args.wheels_dir else None
+
+    print("[INFO] Подготовка окружения для UI:")
+    for line in _format_plan(resolved, target_path, models_override, offline_effective, wheels_dir):
+        print(line)
+
+    lock_path = save_resolved_lock(resolved)
+    comfy_home, models_dir = realize_from_resolved(
+        resolved,
+        target_path=target_path,
+        models_dir_override=models_override,
+        wheels_dir=wheels_dir,
+        offline=offline_effective,
+    )
+
+    effective_models_dir = models_override or models_dir
+    _update_runtime_env(comfy_home, effective_models_dir)
+
+    python_exe = _venv_python_from_env() or _select_python_executable()
+    main_py = comfy_home / "ComfyUI" / "main.py"
+    if not main_py.exists():
+        print(f"[ERROR] Не найден ComfyUI main.py: {main_py}")
+        return 2
+
+    cmd = [python_exe, str(main_py), "--listen", args.host, "--port", str(args.port)]
+    extra_args = list(args.extra_args or [])
+    if extra_args and extra_args[0] == "--":
+        extra_args = extra_args[1:]
+    cmd.extend(extra_args)
+
+    print("[INFO] Запуск ComfyUI:")
+    print("  " + " ".join(cmd))
+    print(f"  COMFY_HOME={comfy_home}")
+    print(f"  MODELS_DIR={effective_models_dir}")
+    print(f"  resolved_lock={lock_path}")
+
+    try:
+        return subprocess.call(cmd, env=os.environ.copy())
+    except KeyboardInterrupt:
+        print("[INFO] Остановка по Ctrl+C")
+        return 0
+
+
+def cmd_run_handler(args: argparse.Namespace) -> int:
+    if args.offline:
+        prev_offline = os.environ.get("COMFY_OFFLINE")
+        os.environ["COMFY_OFFLINE"] = "1"
+    else:
+        prev_offline = None
+
     cli_args = [
         "--version-id",
         args.version_id,
@@ -464,7 +570,74 @@ def cmd_test(args: argparse.Namespace) -> int:
         cli_args.extend(["--models-dir", str(models_dir_default)])
     if args.verbose:
         cli_args.append("--verbose")
-    return handler_main.main(cli_args)
+
+    try:
+        return handler_main.main(cli_args)
+    finally:
+        if args.offline:
+            if prev_offline is None:
+                os.environ.pop("COMFY_OFFLINE", None)
+            else:
+                os.environ["COMFY_OFFLINE"] = prev_offline
+
+
+def cmd_delete(args: argparse.Namespace) -> int:
+    target_path = pathlib.Path(args.target).resolve() if args.target else _pick_default_comfy_home(args.version_id)
+    removed_any = False
+    if target_path.exists():
+        print(f"[INFO] Удаляем окружение: {target_path}")
+        shutil.rmtree(target_path)
+        removed_any = True
+    else:
+        print(f"[WARN] Окружение не найдено: {target_path}")
+
+    lock_path = _lock_path_for_version(args.version_id)
+    if lock_path.exists():
+        lock_path.unlink()
+        removed_any = True
+        print(f"[INFO] Удалён resolved-lock: {lock_path}")
+
+    if args.remove_spec:
+        try:
+            spec_path = _resolve_spec_path(args.version_id)
+        except FileNotFoundError:
+            spec_path = None
+        if spec_path and spec_path.exists():
+            spec_path.unlink()
+            removed_any = True
+            print(f"[INFO] Удалена спецификация: {spec_path}")
+        else:
+            print("[WARN] Файл спецификации не найден")
+
+    if not removed_any:
+        print("[WARN] Нечего удалять")
+    return 0
+
+
+def cmd_clone(args: argparse.Namespace) -> int:
+    try:
+        source_path = _resolve_spec_path(args.source_version)
+    except FileNotFoundError as exc:
+        print(f"[ERROR] {exc}")
+        return 2
+
+    try:
+        spec = json.loads(source_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"[ERROR] Не удалось прочитать {source_path}: {exc}")
+        return 2
+
+    spec["version_id"] = args.new_version
+
+    output_path = pathlib.Path(args.output).resolve() if args.output else (pathlib.Path("versions") / f"{args.new_version}.json")
+    if output_path.exists() and not args.force:
+        print(f"[ERROR] Файл {output_path} уже существует. Используйте --force для перезаписи.")
+        return 2
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(spec, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"[OK] Версия {args.source_version} клонирована в {output_path}")
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -497,16 +670,46 @@ def build_parser() -> argparse.ArgumentParser:
     p_realize.add_argument("--dry-run", action="store_true", help="Show plan without changes")
     p_realize.set_defaults(func=cmd_realize)
 
-    p_test = subparsers.add_parser("test", help="Smoke-test workflow execution for version id")
-    p_test.add_argument("version_id", help="Version identifier (versions/<id>.json)")
-    p_test.add_argument("--workflow", required=True, help="Path to workflow JSON")
-    p_test.add_argument("--output", choices=["base64", "gcs"], default="base64", help="Output mode for handler")
-    p_test.add_argument("--out-file", default=None, help="Write base64 output to file")
-    p_test.add_argument("--gcs-bucket", default=os.environ.get("GCS_BUCKET"), help="GCS bucket for outputs")
-    p_test.add_argument("--gcs-prefix", default=os.environ.get("GCS_PREFIX", "comfy/outputs"), help="Prefix inside bucket")
-    p_test.add_argument("--models-dir", default=None, help="Override MODELS_DIR for handler")
-    p_test.add_argument("--verbose", action="store_true", help="Verbose logs")
-    p_test.set_defaults(func=cmd_test)
+    p_validate = subparsers.add_parser("validate", help="Validate spec and print resolved summary")
+    p_validate.add_argument("version_id", help="Version identifier (versions/<id>.json)")
+    p_validate.add_argument("--offline", action="store_true", help="Resolve without network calls")
+    p_validate.set_defaults(func=cmd_validate)
+
+    p_run_ui = subparsers.add_parser("run-ui", help="Realize and launch ComfyUI for version id")
+    p_run_ui.add_argument("version_id", help="Version identifier (versions/<id>.json)")
+    p_run_ui.add_argument("--target", help="Override COMFY_HOME path", default=None)
+    p_run_ui.add_argument("--models-dir", help="Override MODELS_DIR", default=None)
+    p_run_ui.add_argument("--wheels-dir", help="Directory with wheel files for offline install", default=None)
+    p_run_ui.add_argument("--offline", action="store_true", help="Skip git/pip operations where possible")
+    p_run_ui.add_argument("--host", default="0.0.0.0", help="Host for ComfyUI web server")
+    p_run_ui.add_argument("--port", type=int, default=8188, help="Port for ComfyUI web server")
+    p_run_ui.add_argument("--extra-args", nargs=argparse.REMAINDER, help="Additional args passed to ComfyUI (use -- to separate)")
+    p_run_ui.set_defaults(func=cmd_run_ui)
+
+    p_run_handler = subparsers.add_parser("run-handler", help="Run handler workflow for version id")
+    p_run_handler.add_argument("version_id", help="Version identifier (versions/<id>.json)")
+    p_run_handler.add_argument("--workflow", required=True, help="Path to workflow JSON")
+    p_run_handler.add_argument("--output", choices=["base64", "gcs"], default="base64", help="Output mode")
+    p_run_handler.add_argument("--out-file", default=None, help="Write base64 output to file")
+    p_run_handler.add_argument("--gcs-bucket", default=os.environ.get("GCS_BUCKET"), help="GCS bucket for outputs")
+    p_run_handler.add_argument("--gcs-prefix", default=os.environ.get("GCS_PREFIX", "comfy/outputs"), help="Prefix inside bucket")
+    p_run_handler.add_argument("--models-dir", default=None, help="Override MODELS_DIR for handler")
+    p_run_handler.add_argument("--verbose", action="store_true", help="Verbose logs")
+    p_run_handler.add_argument("--offline", action="store_true", help="Set COMFY_OFFLINE=1 during execution")
+    p_run_handler.set_defaults(func=cmd_run_handler)
+
+    p_delete = subparsers.add_parser("delete", help="Remove realized environment and resolved lock for version")
+    p_delete.add_argument("version_id", help="Version identifier (versions/<id>.json)")
+    p_delete.add_argument("--target", default=None, help="Explicit COMFY_HOME to remove")
+    p_delete.add_argument("--remove-spec", action="store_true", help="Delete versions/<id>.json as well")
+    p_delete.set_defaults(func=cmd_delete)
+
+    p_clone = subparsers.add_parser("clone", help="Clone spec to new version id")
+    p_clone.add_argument("source_version", help="Existing version identifier")
+    p_clone.add_argument("new_version", help="New version identifier")
+    p_clone.add_argument("--output", default=None, help="Explicit output path (default: versions/<new>.json)")
+    p_clone.add_argument("--force", action="store_true", help="Overwrite existing output")
+    p_clone.set_defaults(func=cmd_clone)
 
     return parser
 

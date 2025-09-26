@@ -32,7 +32,7 @@
 
 ### 3. Развёртывание версии (realize) — выполнено
 
--   `realize_version.py` принимает новую спецификацию (`--version-id/--spec`), делает резолв + realize без `lock`
+-   `version.py realize` принимает новую спецификацию (`--version-id`) и выполняет резолв + realize без `lock`
 -   `COMFY_HOME=/runpod-volume/comfy-<version_id>` по умолчанию, создаёт отдельный `.venv`
 -   Автосбор зависимостей ядра и кастом-нода (requirements/pyproject) с поддержкой wheels через `--wheels-dir`
 -   Кастом‑ноды клонируются в кеш `<repo>@<commit>` под `COMFY_CACHE_ROOT/custom_nodes`, в `COMFY_HOME/custom_nodes/<name>` создаются symlink'и
@@ -48,12 +48,11 @@
 
 ### 5. CLI верхнего уровня — выполнено
 
--   Добавлен `scripts/version.py` с командами `resolve`, `realize`, `test`
--   `scripts/run_handler_local.sh` обновлён на `--version-id`
+-   Добавлен `scripts/version.py` с командами `create`, `validate`, `resolve`, `realize`, `run-ui`, `run-handler`, `clone`, `delete`
 
 ### 6. Документация
 
-6.1 Обновить cheatsheets (`README.md`, `create_version.md`, `realize_version.md`, `runpod_local.md`) под новую схему
+6.1 Актуализировать документацию (manual, instructions, tech, runpod, smoketest)
 6.2 Удалить/архивировать разделы про `lockfiles`; убрать упоминания `--lock`
 6.3 Добавить раздел про `MODELS_DIR` и `extra_model_paths.yaml`
 

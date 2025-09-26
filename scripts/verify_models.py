@@ -9,7 +9,7 @@ Features:
 
 Usage example:
   python3 scripts/verify_models.py \
-    --lock lockfiles/comfy-<name>.lock.json \
+    --lock ~/.cache/runpod-comfy/resolved/<name>.lock.json \
     --models-dir "$COMFY_HOME/models"
 
 Exit codes:

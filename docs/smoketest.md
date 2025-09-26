@@ -1,87 +1,97 @@
-## Smoketest: локальная ручная проверка функционала
+## Smoketest: локальная ручная проверка
 
-Ниже — минимальный набор шагов, чтобы вручную проверить функциональность проекта локально на macOS (или в Linux) без RunPod. Проверяется: создание lock, верификация моделей, запуск handler (base64/GCS), сравнение артефакта с базовой метрикой.
+Набор шагов для проверки основных сценариев: создание версии, развёртывание окружения, запуск UI/handler и загрузка в GCS.
 
 ### Предусловия
 
--   Установлены: Python 3.11+, Docker (необязательно для этого smoketest), Git.
--   В корне проекта: `python -m venv .venv && source .venv/bin/activate && pip install -U pip pytest`.
--   По необходимости: `pip install google-cloud-storage` (если хотите проверить вывод в GCS).
+-   Python 3.11+
+-   Git
+-   (Опционально) Docker для проверки образа
+-   Созданное виртуальное окружение: `python -m venv .venv && source .venv/bin/activate`
+-   Установленные зависимости: `pip install -r requirements.txt`
 
-### 1) Подготовка рабочего каталога
+### 1. Подготовка путей
 
-1. Создайте рабочую директорию для Comfy (локально):
-    - `export COMFY_HOME="$(pwd)/comfy"`
-    - `mkdir -p "$COMFY_HOME/ComfyUI" "$COMFY_HOME/models"`
-2. Создайте пример requirements (опционально):
-    - `echo "requests==2.32.3" > requirements.txt`
-
-### 2) Создание lock-файла
-
-1. Минимальный lock без моделей:
-    - `python scripts/version.py create local --repo https://github.com/comfyanonymous/ComfyUI@main`
-    - Ожидаемый вывод: путь к `lockfiles/comfy-local.lock.json`. Файл должен существовать и содержать базовые секции.
-2. (Опционально) Добавить python-зависимости из `requirements.txt`:
-    - `python scripts/version.py create local-req --repo https://github.com/comfyanonymous/ComfyUI@main --models models/demo.json`
-
-### 3) Верификация моделей (локально без скачиваний)
-
-1. Создайте тестовый lock с моделями (пример):
-    - Создайте файл `lockfiles/comfy-models.lock.json` со структурой:
-
-```json
-{
-    "models": [
-        {
-            "name": "dummy",
-            "source": null,
-            "target_path": "$MODELS_DIR/dummy.bin",
-            "checksum": null
-        }
-    ]
-}
+```bash
+export COMFY_HOME="$(pwd)/smoke-comfy"
+export MODELS_DIR="$(pwd)/smoke-models"
+mkdir -p "$MODELS_DIR"
 ```
 
-2. Запустите верификацию:
-    - `python scripts/verify_models.py --lock lockfiles/comfy-models.lock.json --models-dir "$COMFY_HOME/models" --verbose`
-    - Ожидаемое: файл отсутствует → статус ok или сообщение, что модель отсутствует (по коду возврата 0, если нет ошибок валидации).
+### 2. Создание спецификации
 
-Примечание: чтобы протестировать скачивание, укажите `source` как `file:///…` на локальный файл и задайте `checksum`.
+```bash
+python3 scripts/version.py create smoke \
+  --repo https://github.com/comfyanonymous/ComfyUI@master \
+  --models '[{"source": "https://example.com/model.safetensors", "name": "dummy", "target_subdir": "checkpoints"}]' \
+  --output versions/smoke.json
+```
 
-### 4) Запуск handler в режиме base64
+Проверьте, что файл `versions/smoke.json` создан и содержит `schema_version = 2`.
 
-1. Создайте простой workflow JSON:
-    - `echo '{"graph": {}}' > workflow.json`
-2. Запустите handler (используется «заглушка» выполнения):
-    - `python -m rp_handler.main --lock lockfiles/comfy-local.lock.json --workflow workflow.json --output base64 --verbose`
-    - Ожидаемое: в stdout печатается base64-строка. Декодируема в байты содержимого `workflow.json`.
+### 3. Проверка спецификации
 
-### 5) Сравнение артефакта с базовой метрикой
+```bash
+python3 scripts/version.py validate smoke
+```
 
-1. Запись базовой метрики:
-    - `python scripts/repro_workflow_hash.py --lock lockfiles/comfy-local.lock.json --workflow workflow.json --baseline baselines/wf.json --mode record`
-2. Сравнение:
-    - `python scripts/repro_workflow_hash.py --lock lockfiles/comfy-local.lock.json --workflow workflow.json --baseline baselines/wf.json --mode compare`
-    - Ожидаемое: вывод «Artifact matches baseline», код возврата 0.
+Ожидаемое: вывод плана, создан файл кеша `~/.cache/runpod-comfy/resolved/smoke.lock.json`.
 
-### 6) Запуск handler в режиме GCS (опционально)
+### 4. Развёртывание и запуск UI
 
-1. Подготовьте переменные окружения:
-    - `export GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/sa.json`
-    - `export GOOGLE_CLOUD_PROJECT=<project_id>`
-    - `export GCS_BUCKET=<bucket_name>`
-    - (опционально) `export GCS_PREFIX=comfy/outputs` `export GCS_PUBLIC=1` `export GCS_SIGNED_URL_TTL=60`
-2. Запуск:
-    - `python -m rp_handler.main --lock lockfiles/comfy-local.lock.json --workflow workflow.json --output gcs --gcs-bucket "$GCS_BUCKET" --gcs-prefix "$GCS_PREFIX" --verbose`
-    - Ожидаемое: в stdout печатается `gs://…` ссылка. В логах может отображаться signed URL (если включено).
+```bash
+python3 scripts/version.py realize smoke --target "$COMFY_HOME"
+python3 scripts/version.py run-ui smoke --target "$COMFY_HOME" --port 9999 --extra-args -- --no-auto-launch &
+UI_PID=$!
+sleep 5
+curl -sSf "http://127.0.0.1:9999" >/dev/null
+kill "$UI_PID"
+```
 
-### 7) Быстрый прогон автотестов
+Ожидаемое: UI запускается без ошибок, HTTP-запрос возвращает код 200.
 
--   `pytest -q`
--   Ожидаемое: все тесты проходят локально без внешних сетевых вызовов.
+### 5. Запуск handler (base64)
 
-### Троблшутинг
+```bash
+echo '{"graph": {}}' > workflows/smoke.json
+python3 scripts/version.py run-handler smoke \
+  --workflow workflows/smoke.json \
+  --output base64 --out-file smoke.b64
+python3 - <<'PY'
+import base64, json
+with open('smoke.b64', 'rb') as fh:
+    data = base64.b64decode(fh.read())
+json.loads(data.decode('utf-8'))
+PY
+```
 
--   Ошибка GCS импорта: установите `pip install google-cloud-storage` или используйте режим `--output base64`.
--   Отсутствуют права на bucket: отключите проверку `export GCS_VALIDATE=0` или настройте IAM.
--   Путь к COMFY_HOME: экспортируйте `COMFY_HOME` перед шагами, чтобы не использовались дефолтные пути.
+Ожидаемое: команда завершилась кодом 0, файл `smoke.b64` содержит JSON воркфлоу.
+
+### 6. Запуск handler (GCS, опционально)
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS=/abs/path/sa.json
+export GOOGLE_CLOUD_PROJECT=<project>
+export GCS_BUCKET=<bucket>
+export GCS_PREFIX=comfy/smoke
+python3 scripts/version.py run-handler smoke \
+  --workflow workflows/smoke.json \
+  --output gcs --gcs-bucket "$GCS_BUCKET" --gcs-prefix "$GCS_PREFIX" --verbose
+```
+
+Ожидаемое: в stdout печатается `gs://` путь. Проверяйте логи на наличие signed URL (если настроено).
+
+### 7. Очистка
+
+```bash
+python3 scripts/version.py delete smoke --target "$COMFY_HOME" --remove-spec
+rm -f smoke.b64 workflows/smoke.json
+```
+
+### 8. Автотесты
+
+```bash
+pytest -q
+```
+
+Все тесты должны завершиться успешно.

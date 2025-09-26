@@ -48,11 +48,8 @@
 В каталоге `scripts/` утилиты:
 
 -   `init_comfyui.sh` — развертывание ComfyUI, базовая структура, создание `venv`.
--   `version.py` — CLI высокого уровня (`create`, `resolve`, `realize`, `test`).
--   `realize_version.py` — развёртка версии из `versions/<id>.json` (используется как низкоуровневый инструмент).
--   `remove_version.sh` — удаление версии (чистка каталогов/метаданных).
+-   `version.py` — CLI высокого уровня (`create`, `validate`, `resolve`, `realize`, `run-ui`, `run-handler`, `clone`, `delete`).
 -   `build_docker.sh` — сборка Docker-образа с handler.
--   `run_handler_local.sh` — локальный запуск handler с воркфлоу и выбранной версией.
 -   `verify_models.py` — проверка наличия/хэшей моделей из speс (`versions/<id>.json`), скачивание недостающих.
 
 #### `verify_models.py` (детали)
@@ -84,7 +81,7 @@
 
 ### Тестирование (высокоуровнево)
 
--   Локальные проверки: init → `version.py create` → `version.py resolve/realize` → `version.py test`.
+-   Локальные проверки: init → `version.py create` → `version.py validate` → `version.py realize` → `version.py run-handler`.
 -   Docker-проверка: build_docker → run handler → сравнение вывода с эталоном.
 -   Репродукция: на основе одной спецификации собрать окружение дважды и сравнить SHA коммитов/хэши моделей.
 
