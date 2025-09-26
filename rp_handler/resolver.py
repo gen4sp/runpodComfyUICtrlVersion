@@ -352,17 +352,24 @@ def save_resolved_lock(resolved: Dict[str, object]) -> pathlib.Path:
 
 
 def realize_from_resolved(
-    resolved: Dict[str, object], offline: bool = False
+    resolved: Dict[str, object],
+    *,
+    target_path: Optional[pathlib.Path] = None,
+    models_dir_override: Optional[pathlib.Path] = None,
+    wheels_dir: Optional[pathlib.Path] = None,
+    offline: bool = False,
 ) -> Tuple[pathlib.Path, pathlib.Path]:
     """Create/prepare COMFY_HOME based on resolved spec. Returns (comfy_home, models_dir)."""
     version_id = str(resolved.get("version_id") or "version")
-    comfy_home = _pick_default_comfy_home(version_id)
-    models_dir = _models_dir_default(comfy_home)
+    comfy_home = target_path or _pick_default_comfy_home(version_id)
+    comfy_home = comfy_home.resolve()
+    models_dir = (models_dir_override or _models_dir_default(comfy_home)).resolve()
 
     # Ensure base dirs
     (comfy_home / "ComfyUI").mkdir(parents=True, exist_ok=True)
     (comfy_home / "ComfyUI" / "custom_nodes").mkdir(parents=True, exist_ok=True)
     models_dir.mkdir(parents=True, exist_ok=True)
+    (comfy_home / "models").mkdir(parents=True, exist_ok=True)
 
     # Clone or update ComfyUI
     comfy = resolved.get("comfy") or {}
@@ -390,7 +397,11 @@ def realize_from_resolved(
     py = _venv_python_from_env() or _select_python_executable()
     req = repo_dir / "requirements.txt"
     if req.exists() and not offline:
-        code, out, err = run_command([py, "-m", "pip", "install", "-r", str(req)])
+        cmd = [py, "-m", "pip", "install"]
+        if wheels_dir:
+            cmd.extend(["--no-index", "--find-links", str(wheels_dir)])
+        cmd.extend(["-r", str(req)])
+        code, out, err = run_command(cmd)
         if code != 0:
             log_warn(f"pip install ComfyUI requirements failed: {err or out}")
 
@@ -431,18 +442,55 @@ def realize_from_resolved(
                 node_req = cache_path / "requirements.txt"
                 node_proj = cache_path / "pyproject.toml"
                 if node_req.exists():
-                    code, out, err = run_command([py, "-m", "pip", "install", "-r", str(node_req)])
+                    cmd = [py, "-m", "pip", "install"]
+                    if wheels_dir:
+                        cmd.extend(["--no-index", "--find-links", str(wheels_dir)])
+                    cmd.extend(["-r", str(node_req)])
+                    code, out, err = run_command(cmd)
                     if code != 0:
                         log_warn(f"pip install for node {n_name} failed: {err or out}")
                 elif node_proj.exists():
-                    code, out, err = run_command([py, "-m", "pip", "install", str(cache_path)])
+                    cmd = [py, "-m", "pip", "install"]
+                    if wheels_dir:
+                        cmd.extend(["--no-index", "--find-links", str(wheels_dir)])
+                    cmd.append(str(cache_path))
+                    code, out, err = run_command(cmd)
                     if code != 0:
                         log_warn(f"pip install (pyproject) for node {n_name} failed: {err or out}")
 
     # Export env
     os.environ["COMFY_HOME"] = str(comfy_home)
     os.environ["MODELS_DIR"] = str(models_dir)
+    _write_extra_model_paths(comfy_home=comfy_home, models_dir=models_dir)
     return comfy_home, models_dir
+
+
+def _write_extra_model_paths(*, comfy_home: pathlib.Path, models_dir: pathlib.Path) -> None:
+    extra_yaml = comfy_home / "extra_model_paths.yaml"
+    mapping = {
+        "base_path": str(models_dir),
+        "checkpoints": str(models_dir / "checkpoints"),
+        "clip": str(models_dir / "clip"),
+        "clip_vision": str(models_dir / "clip_vision"),
+        "configs": str(models_dir / "configs"),
+        "controlnet": str(models_dir / "controlnet"),
+        "diffusion_models": str(models_dir / "diffusion_models"),
+        "embeddings": str(models_dir / "embeddings"),
+        "inpaint": str(models_dir / "inpaint"),
+        "loras": str(models_dir / "loras"),
+        "photomaker": str(models_dir / "photomaker"),
+        "text_encoders": str(models_dir / "text_encoders"),
+        "unet": str(models_dir / "unet"),
+        "upscale_models": str(models_dir / "upscale_models"),
+        "vae": str(models_dir / "vae"),
+    }
+    try:
+        lines = ["comfyui:\n"]
+        for key in sorted(mapping.keys()):
+            lines.append(f"  {key}: {mapping[key]}\n")
+        extra_yaml.write_text("".join(lines), encoding="utf-8")
+    except Exception as exc:
+        log_warn(f"Не удалось записать extra_model_paths.yaml: {exc}")
 
 
 def validate_version_spec(raw_spec: object, source_path: pathlib.Path) -> Dict[str, object]:

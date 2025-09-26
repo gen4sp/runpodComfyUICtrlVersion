@@ -191,26 +191,8 @@ except Exception as e:
 ## Запуск с кастомными настройками
 
 ```bash
-# Создание extra_model_paths.yaml для дополнительных путей
-cat > extra_model_paths.yaml << EOF
-comfyui:
-    base_path: /runpod-volume/comfy
-    checkpoints: models/checkpoints
-    clip: models/clip
-    clip_vision: models/clip_vision
-    configs: models/configs
-    controlnet: models/controlnet
-    diffusion_models: models/diffusion_models
-    embeddings: models/embeddings
-    loras: models/loras
-    unet: models/unet
-    vae: models/vae
-    photomaker: models/photomaker
-    upscale_models: models/upscale_models
-EOF
-
-# Запуск с extra_model_paths
-cd /runpod-volume/comfy
+# Скрипт realize_version.py автоматически создаёт extra_model_paths.yaml
+cd /runpod-volume/comfy-my-version
 source .venv/bin/activate
 python ComfyUI/main.py --extra-model-paths-config extra_model_paths.yaml --listen 0.0.0.0 --port 8188
 ```

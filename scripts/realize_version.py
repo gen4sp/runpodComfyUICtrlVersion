@@ -73,6 +73,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     g.add_argument("--spec", dest="spec_path", help="Путь к произвольной версии JSON")
     p.add_argument("--target", dest="target_path", default=None, help="Желаемый COMFY_HOME для развёртки")
     p.add_argument("--models-dir", dest="models_dir", default=None, help="Явный MODELS_DIR (по умолчанию из resolved)")
+    p.add_argument(
+        "--wheels-dir",
+        dest="wheels_dir",
+        default=None,
+        help="Каталог с wheels (добавляет --no-index/--find-links при установке зависимостей)",
+    )
     p.add_argument("--dry-run", dest="dry_run", action="store_true", help="Только показать план действий")
     p.add_argument("--offline", dest="offline", action="store_true", help="Не выполнять git/pip операции")
     return p
@@ -147,6 +153,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         print("[INFO] Offline режим: git/pip операции будут пропущены там, где возможно")
 
     models_dir_override = args.models_dir or None
+    wheels_dir_override = args.wheels_dir or None
 
     summary_lines = [
         f"  version_id:  {resolved.get('version_id')}",
@@ -160,6 +167,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     summary_lines.append(f"  offline:     {effective_offline}")
     if models_dir_override:
         summary_lines.append(f"  models_dir:  {models_dir_override}")
+    if wheels_dir_override:
+        summary_lines.append(f"  wheels_dir:  {wheels_dir_override}")
 
     custom_nodes = resolved.get("custom_nodes")
     if isinstance(custom_nodes, list) and custom_nodes:
@@ -191,12 +200,21 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     save_resolved_lock(resolved)
 
-    comfy_home, default_models_dir = realize_from_resolved(resolved, offline=effective_offline)
+    comfy_home, default_models_dir = realize_from_resolved(
+        resolved,
+        target_path=target_path,
+        models_dir_override=(pathlib.Path(models_dir_override).resolve() if models_dir_override else None),
+        wheels_dir=(pathlib.Path(wheels_dir_override).resolve() if wheels_dir_override else None),
+        offline=effective_offline,
+    )
     models_dir_effective = pathlib.Path(models_dir_override).resolve() if models_dir_override else default_models_dir
+    extra_paths_cfg = comfy_home / "extra_model_paths.yaml"
 
     print("[OK] Версия готова")
     print(f"  COMFY_HOME: {comfy_home}")
     print(f"  MODELS_DIR: {models_dir_effective}")
+    if extra_paths_cfg.exists():
+        print(f"  extra_model_paths: {extra_paths_cfg}")
     return 0
 
 

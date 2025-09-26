@@ -282,10 +282,11 @@ python3 scripts/realize_version.py --version-id "$COMFY_VERSION_NAME" --offline
 python3 scripts/realize_version.py \
   --version-id "$COMFY_VERSION_NAME" \
   --target /runpod-volume/comfy-$COMFY_VERSION_NAME \
-  --models-dir /workspace/models
+  --models-dir /workspace/models \
+  --wheels-dir /workspace/wheels
 ```
 
-Результат: создаётся кеш `~/.comfy-cache/resolved/<version_id>.lock.json`, готовится `COMFY_HOME` с `.venv`, ядро и кастом-ноды чек-аутятся по коммитам, модели подтягиваются в единый `MODELS_DIR` (можно переопределить флагом). Команда `--dry-run` печатает план и завершает работу без изменений.
+Результат: создаётся кеш `~/.comfy-cache/resolved/<version_id>.lock.json`, готовится `COMFY_HOME` с `.venv`, ядро и кастом-ноды чек-аутятся по коммитам, модели подтягиваются в единый `MODELS_DIR` (можно переопределить флагом), рядом генерируется `extra_model_paths.yaml`. Команда `--dry-run` печатает план и завершает работу без изменений. При указании `--wheels-dir` все установки выполняются с `--no-index --find-links`.
 
 ### Удаление версии
 

@@ -5,8 +5,8 @@
 -   резолвит ветки/теги в коммиты и сохраняет `~/.comfy-cache/resolved/<version_id>.lock.json`
 -   готовит изолированный `COMFY_HOME` с отдельным `.venv`
 -   клонирует ядро и кастом-ноды из кеша/репозиториев, создаёт symlink'и
--   проверяет и докачивает модели в единый `MODELS_DIR`
--   поддерживает `--dry-run`
+-   докачивает модели в единый `MODELS_DIR`, генерирует `extra_model_paths.yaml`
+-   поддерживает `--dry-run`, `--offline`, `--wheels-dir`
 
 Сценарий одинаков для локальной разработки, RunPod volume и CI.
 
@@ -71,7 +71,8 @@ python3 scripts/realize_version.py --spec versions/wan22-fast.json
 ```bash
 python3 scripts/realize_version.py \
   --spec versions/wan22-fast.json \
-  --target /runpod-volume/comfy-wan22-fast
+  --target /runpod-volume/comfy-wan22-fast \
+  --wheels-dir /wheels
 ```
 
 ### Dry-run (только показать действия)
@@ -99,5 +100,5 @@ python3 scripts/realize_version.py \
 
 -   По умолчанию `target` выбирается так: `/runpod-volume/comfy-<id>` (если каталог существует) → `$HOME/comfy-<id>` → `./comfy-<id>`.
 -   Каждый `target` содержит отдельный `.venv` (изоляция зависимостей по версии).
--   Модели проверяются/докачиваются в `$target/models` (можно монтировать volume на RunPod).
--   Скрипт вызывает `scripts/clone_version.sh`, который читает Python‑секции и модели из lock‑файла.
+-   Модели докачиваются в `MODELS_DIR` (по умолчанию `$target/models`), рядом создаётся `extra_model_paths.yaml`.
+-   При наличии `--wheels-dir` все `pip install` выполняются с `--no-index --find-links <dir>`.

@@ -30,15 +30,15 @@
 2.3 Идемпотентность при повторном запуске
 2.4 Поддержать `--dry-run` (печать плана)
 
-### 3. Развёртывание версии (realize)
+### 3. Развёртывание версии (realize) — выполнено
 
-3.1 `realize_version.py`: принимает новую спецификацию (`--version-id/--spec`), делает резолв + realize без `lock`
-3.2 `COMFY_HOME=/runpod-volume/comfy-<version_id>`, отдельный `.venv`
-3.3 Автосбор зависимостей нод (requirements/pyproject) + поддержка wheels (`--find-links /wheels`)
-3.4 Кастом‑ноды: клон в кеш `<repo>@<commit>`, symlink в `COMFY_HOME/custom_nodes/<name>`
-3.5 Модели: загрузка в общий `MODELS_DIR` (если файла нет); без checksum; не дублировать
-3.6 Генерация/подключение `extra_model_paths.yaml` при необходимости
-3.7 `--offline`: использовать доступное; недостающее — предупреждать, не падать
+-   `realize_version.py` принимает новую спецификацию (`--version-id/--spec`), делает резолв + realize без `lock`
+-   `COMFY_HOME=/runpod-volume/comfy-<version_id>` по умолчанию, создаёт отдельный `.venv`
+-   Автосбор зависимостей ядра и кастом-нода (requirements/pyproject) с поддержкой wheels через `--wheels-dir`
+-   Кастом‑ноды клонируются в кеш `<repo>@<commit>`, в `COMFY_HOME/custom_nodes/<name>` создаются symlink'и
+-   Модели загружаются в общий `MODELS_DIR` без дублирования
+-   Генерируется и подключается `extra_model_paths.yaml`
+-   Офлайн-режим использует локальные данные, отсутствующее помечается предупреждениями
 
 ### 4. Handler
 
