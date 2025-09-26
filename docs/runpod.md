@@ -53,13 +53,13 @@ mkdir -p /runpod-volume/comfy/models
 ```
 
 4. Размещение спеки версии: включите `versions/<id>.json` в образ или смонтируйте её.
-   Для автоматической развёртки окружения на volume используйте `realize_version.py`:
+   Для автоматической развёртки окружения на volume используйте `scripts/version.py`:
 
 ```bash
 # Пример быстрой развёртки версии на volume
-python3 /app/scripts/realize_version.py --version-id "$COMFY_VERSION_NAME"
-# или с явной спеки
-python3 /app/scripts/realize_version.py --spec /app/versions/$COMFY_VERSION_NAME.json
+python3 /app/scripts/version.py realize "$COMFY_VERSION_NAME"
+# или с явным путём
+python3 /app/scripts/version.py realize "$COMFY_VERSION_NAME" --target /runpod-volume/comfy-$COMFY_VERSION_NAME
 ```
 
 5. Smoke-тест (минимальный воркфлоу):

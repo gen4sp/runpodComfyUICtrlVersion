@@ -12,7 +12,7 @@ def test_derive_env_defaults(monkeypatch, tmp_path: Path):
     monkeypatch.delenv("COMFY_HOME", raising=False)
     env = resolver.derive_env(models_dir=None)
     assert env["COMFY_HOME"].endswith("/opt/comfy")
-    assert env["MODELS_DIR"].endswith("/opt/comfy/models")
+    assert env["MODELS_DIR"].endswith("/.cache/runpod-comfy/models")
 
 
 def test_load_lock_missing_returns_empty(tmp_path: Path):
