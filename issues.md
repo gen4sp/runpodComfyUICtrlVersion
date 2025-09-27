@@ -28,7 +28,7 @@
 
 -   ~~**Лишние инструменты для lock v1**~~ ✅ Старые скрипты (`scripts/clone_version.sh`, `create_version.py`, `lockfiles/`) удалены, комментарии обновлены.
 -   **Тесты ориентированы на старые сценарии** (`tests/test_main.py` и др. используют schema v1).
--   **Куча RunPod-специфичных путей**: `/workspace/custom_nodes/workspace`, `/runpod-volume`, которые могут быть не нужны при едином кэше.
+-   **Куча RunPod-специфичных путей**: `/workspace/custom_nodes/workspace`, `/runpod-volume`, которые могут быть не нужны при едином кэше. ➡️ Обновить документацию/конфиги на дефолты `/workspace/ComfyUI` + явное указание для volume.
 
 ## План работ
 

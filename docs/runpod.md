@@ -16,8 +16,8 @@
 
 Переменные, которые использует handler:
 
--   `COMFY_HOME` (по умолчанию `/opt/comfy`) — корень окружения версии.
--   `MODELS_DIR` (по умолчанию `$COMFY_HOME/models`) — каталог моделей.
+-   `COMFY_HOME` (по умолчанию `/workspace/ComfyUI` внутри контейнера) — корень окружения версии.
+-   `MODELS_DIR` (по умолчанию `$COMFY_HOME/models`) — каталог моделей; на Pod переопределите на `/runpod-volume/...`.
 -   `COMFY_VERSION_NAME` — имя версии; по нему ищется спека `versions/<id>.json`.
 -   `OUTPUT_MODE` — `gcs` (по умолчанию) или `base64`.
 -   GCS: `GCS_BUCKET` (обязателен для `gcs`), `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`/`GCS_PROJECT`,
@@ -27,7 +27,7 @@
 
 1. Подготовьте Pod с volume, смонтированным в `/runpod-volume`.
 
-2. Рекомендуемые переменные окружения Pod:
+2. Рекомендуемые переменные окружения Pod (пример с volume `/runpod-volume`):
 
 ```text
 COMFY_HOME=/runpod-volume/comfy
@@ -35,7 +35,7 @@ MODELS_DIR=/runpod-volume/comfy/models
 COMFY_VERSION_NAME=<ваша_версия>
 OUTPUT_MODE=gcs
 GCS_BUCKET=<bucket>
-GOOGLE_APPLICATION_CREDENTIALS=/workspace/sa.json   # путь внутри контейнера
+GOOGLE_APPLICATION_CREDENTIALS=/opt/creds/sa.json   # путь внутри контейнера
 GOOGLE_CLOUD_PROJECT=<gcp-project>
 GCS_PREFIX=comfy/outputs
 GCS_RETRIES=3
@@ -52,7 +52,7 @@ ls -ld /runpod-volume
 mkdir -p /runpod-volume/comfy/models
 ```
 
-4. Размещение спеки версии: включите `versions/<id>.json` в образ или смонтируйте её.
+4. Размещение спеки версии: включите `versions/<id>.json` в образ (`/app/versions`) или смонтируйте её.
    Для автоматической развёртки окружения на volume используйте `scripts/version.py`:
 
 ```bash
@@ -65,10 +65,10 @@ python3 /app/scripts/version.py realize "$COMFY_VERSION_NAME" --target /runpod-v
 5. Smoke-тест (минимальный воркфлоу):
 
 ```bash
-echo '{}' > /app/workflows/minimal.json
+echo '{}' > /tmp/minimal.json
 python -m rp_handler.main \
   --version-id "${COMFY_VERSION_NAME}" \
-  --workflow /app/workflows/minimal.json \
+  --workflow /tmp/minimal.json \
   --output base64 | head -c 80; echo
 # Ожидается base64-строка (контент заглушки/воркфлоу).
 ```
@@ -91,7 +91,7 @@ python -m rp_handler.main \
 ### Совместимость путей и прав
 
 -   Для Pods используйте `/runpod-volume` как базу для `COMFY_HOME` и моделей.
--   Внутри образа дефолты: `/opt/comfy` и `/opt/comfy/models`. Их следует переопределять переменными окружения, если используется volume.
+-   Внутри образа дефолты: `/workspace/ComfyUI` и `/workspace/models`. Их следует переопределять переменными окружения, если используется volume.
 -   Все скрипты и handler работают в non-interactive режиме; подходят для serverless.
 
 ### Диагностика

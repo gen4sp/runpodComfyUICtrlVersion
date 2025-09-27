@@ -33,7 +33,7 @@
 ### 3. Развёртывание версии (realize) — выполнено
 
 -   `version.py realize` принимает новую спецификацию (`--version-id`) и выполняет резолв + realize без `lock`
--   `COMFY_HOME=/runpod-volume/comfy-<version_id>` по умолчанию, создаёт отдельный `.venv`
+-   `COMFY_HOME` по умолчанию `/workspace/ComfyUI` (создаёт отдельный `.venv`), для pod задаётся вручную `/runpod-volume/ComfyUI` или `COMFY_HOME=/runpod-volume/ComfyUI`
 -   Автосбор зависимостей ядра и кастом-нода (requirements/pyproject) с поддержкой wheels через `--wheels-dir`
 -   Кастом‑ноды клонируются в кеш `<repo>@<commit>` под `COMFY_CACHE_ROOT/custom_nodes`, в `COMFY_HOME/custom_nodes/<name>` создаются symlink'и
 -   Модели загружаются в общий `MODELS_DIR` и линкуются из кеша (`COMFY_CACHE_ROOT/models`)

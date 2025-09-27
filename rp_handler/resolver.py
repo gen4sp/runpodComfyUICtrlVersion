@@ -41,12 +41,12 @@ def derive_env(models_dir: Optional[str]) -> Dict[str, str]:
     if comfy_home:
         env["COMFY_HOME"] = str(pathlib.Path(comfy_home).resolve())
     else:
-        env["COMFY_HOME"] = str(pathlib.Path("/opt/comfy").resolve())
+        env["COMFY_HOME"] = str(pathlib.Path("/workspace/ComfyUI").resolve())
 
     if models_dir:
         env["MODELS_DIR"] = str(pathlib.Path(models_dir).resolve())
     else:
-        env["MODELS_DIR"] = str(models_cache_dir())
+        env["MODELS_DIR"] = str(pathlib.Path("/workspace/models").resolve())
 
     return env
 
@@ -222,15 +222,18 @@ def _git_ls_remote(repo: str, ref: Optional[str]) -> Optional[str]:
 
 
 def _pick_default_comfy_home(version_id: str) -> pathlib.Path:
-    # Prefer explicit COMFY_HOME from env
     env_home = os.environ.get("COMFY_HOME")
     if env_home:
         return pathlib.Path(env_home)
-    # Prefer RunPod mounts
-    for base in (pathlib.Path("/runpod-volume"), pathlib.Path("/workspace")):
-        if base.exists() and base.is_dir():
-            return base / f"comfy-{version_id}"
-    # Fallbacks
+
+    default_home = pathlib.Path("/workspace/ComfyUI")
+    if default_home.parent.exists():
+        return default_home
+
+    runpod_volume = pathlib.Path("/runpod-volume")
+    if runpod_volume.exists():
+        return runpod_volume / f"comfy-{version_id}"
+
     home = os.environ.get("HOME")
     if home:
         return pathlib.Path(home) / f"comfy-{version_id}"
@@ -249,7 +252,9 @@ def _models_dir_default(comfy_home: pathlib.Path) -> pathlib.Path:
     env_models = os.environ.get("MODELS_DIR")
     if env_models:
         return pathlib.Path(env_models)
-    return models_cache_dir()
+    if comfy_home.parts[:2] == ("/", "workspace"):
+        return comfy_home.parent / "models"
+    return comfy_home / "models"
 
 
 def _ensure_repo_cache(repo: str, *, offline: bool) -> pathlib.Path:

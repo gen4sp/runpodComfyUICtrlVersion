@@ -8,10 +8,10 @@ from rp_handler import resolver
 
 
 def test_derive_env_defaults(monkeypatch, tmp_path: Path):
-    # No COMFY_HOME env -> default /opt/comfy per resolver
+    # No COMFY_HOME env -> default /workspace/ComfyUI per resolver
     monkeypatch.delenv("COMFY_HOME", raising=False)
     env = resolver.derive_env(models_dir=None)
-    assert env["COMFY_HOME"].endswith("/opt/comfy")
+    assert env["COMFY_HOME"].endswith("/workspace/ComfyUI")
     assert env["MODELS_DIR"].endswith("/.cache/runpod-comfy/models")
 
 

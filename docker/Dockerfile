@@ -9,8 +9,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    COMFY_HOME=/opt/comfy \
-    MODELS_DIR=/opt/comfy/models \
+    COMFY_HOME=/workspace/ComfyUI \
+    MODELS_DIR=/workspace/models \
     COMFY_VERSION_NAME=${COMFY_VERSION_NAME}
 
 WORKDIR /app

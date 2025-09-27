@@ -31,8 +31,8 @@
 
 3.1. Подтвердите расположение по умолчанию:
 
--   модели: `/runpod-volume/cache/models` (переменная `COMFY_CACHE_MODELS`)
--   кастом‑ноды: `/runpod-volume/cache/custom_nodes` (переменная `COMFY_CACHE_NODES`)
+-   модели: `MODELS_DIR` (по умолчанию `$COMFY_HOME/models`)
+-   кастом‑ноды: `COMFY_CACHE_ROOT/custom_nodes`, симлинк в `$COMFY_HOME/ComfyUI/custom_nodes`
     ОТВЕТ: $MODELS_DIR (env) по умолчанию $COMFY_HOME/models. Кастом‑ноды: кеш `/workspace/custom_nodes/workspace` (если смонтирован) или `~/.comfy-cache/custom_nodes`, в версию — symlink в `$COMFY_HOME/ComfyUI/custom_nodes`3.2. Принимаем ли дедупликацию по`sha256`(для моделей) и по`commit SHA`(для нод)?
 ОТВЕТ:как лучше
 3.3. Разрешены ли символические ссылки из кеша в`COMFY_HOME`? (Linux/RunPod — да; иные окружения?)
@@ -127,8 +127,8 @@
 
 14.1. Базовые дефолты подтверждаете?
 
--   `COMFY_HOME`: `/runpod-volume/comfy-<version_id>`
--   `MODELS_DIR` внутри `COMFY_HOME` + ссылки из глобального кеша
+-   `COMFY_HOME`: по умолчанию `/workspace/ComfyUI` (на pod указываем `/runpod-volume/...`)
+-   `MODELS_DIR`: по умолчанию `$COMFY_HOME/models` (или отдельный путь через переменную)
 -   Глобальные кеши в `/runpod-volume/cache/*`
     ОТВЕТ: ок, но кеш для моделей не нужен. В том смысле что они один раз скачиваются и все, если не скачено - скачиваем, если скачено - используем. Не дублируем.
 
