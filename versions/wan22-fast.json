@@ -33,6 +33,13 @@
             "commit": "main",
             "target_dir": "$COMFY_HOME/custom_nodes/ComfyUI-Easy-Use",
             "install_requirements": true
+        },
+        {
+            "name": "RES4LYF",
+            "repo": "https://github.com/ClownsharkBatwing/RES4LYF",
+            "commit": "main",
+            "target_dir": "$COMFY_HOME/custom_nodes/RES4LYF",
+            "install_requirements": true
         }
     ],
     "env": {},
