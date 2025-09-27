@@ -544,6 +544,7 @@ def realize_from_resolved(
     _prepare_models(
         resolved_models=resolved.get("models") or [],
         models_dir=models_dir,
+        comfy_home=comfy_home,
         offline=offline,
     )
 
@@ -554,11 +555,21 @@ def realize_from_resolved(
     return comfy_home, models_dir
 
 
-def _prepare_models(*, resolved_models: List[Dict[str, object]], models_dir: pathlib.Path, offline: bool) -> None:
+def _prepare_models(
+    *,
+    resolved_models: List[Dict[str, object]],
+    models_dir: pathlib.Path,
+    comfy_home: pathlib.Path,
+    offline: bool,
+) -> None:
     if not isinstance(resolved_models, list) or not resolved_models:
         return
 
     offline_effective = bool(offline or verify_models.is_offline_mode())
+    env_vars = {
+        "MODELS_DIR": str(models_dir),
+        "COMFY_HOME": str(comfy_home),
+    }
 
     for model in resolved_models:
         if not isinstance(model, dict):
@@ -573,7 +584,12 @@ def _prepare_models(*, resolved_models: List[Dict[str, object]], models_dir: pat
             log_warn(f"models entry '{name}' пропущен: не указан target_path")
             continue
 
-        target_path = pathlib.Path(target_path_raw)
+        target_expanded = expand_env(target_path_raw, extra_env=env_vars).strip()
+        if not target_expanded:
+            log_warn(f"models entry '{name}' пропущен: target_path пуст после развёртки")
+            continue
+
+        target_path = pathlib.Path(target_expanded)
         if target_path.is_absolute():
             target_abs = target_path.resolve()
         else:
@@ -593,7 +609,6 @@ def _prepare_models(*, resolved_models: List[Dict[str, object]], models_dir: pat
                     )
             continue
 
-        existing_path: Optional[pathlib.Path] = None
         if not target_abs.exists():
             existing_path = _find_existing_model(
                 models_dir=models_dir,
@@ -603,12 +618,25 @@ def _prepare_models(*, resolved_models: List[Dict[str, object]], models_dir: pat
             )
             if existing_path:
                 try:
+                    if existing_path.resolve() == target_abs:
+                        log_info(f"Модель '{name}' уже присутствует: {target_abs}")
+                        continue
+                except Exception:
+                    pass
+
+                try:
+                    log_info(
+                        f"Модель '{name}' отсутствует по {target_abs}, пробую копировать из {existing_path}"
+                    )
                     verify_models.atomic_copy(str(existing_path), str(target_abs))
                     log_info(f"Модель '{name}' скопирована из {existing_path}")
+                    continue
+                except OSError as exc:
+                    raise RuntimeError(
+                        f"Не удалось скопировать модель '{name}' из {existing_path}: {exc}"
+                    )
                 except Exception as exc:
                     log_warn(f"Не удалось скопировать модель '{name}' из {existing_path}: {exc}")
-                else:
-                    continue
 
         if target_abs.exists():
             if checksum_hex and checksum_algo:
@@ -636,6 +664,7 @@ def _prepare_models(*, resolved_models: List[Dict[str, object]], models_dir: pat
 
         try:
             with tempfile.TemporaryDirectory(prefix="model_fetch_", dir=str(models_dir)) as tmp_dir:
+                log_info(f"Загрузка модели '{name}' из source: {source}")
                 tmp_path = verify_models.fetch_to_temp(source, tmp_dir=tmp_dir, timeout=_MODEL_FETCH_TIMEOUT)
                 if checksum_hex and checksum_algo:
                     actual = verify_models.compute_checksum(tmp_path, algo=checksum_algo).split(":", 1)[1]
@@ -644,7 +673,9 @@ def _prepare_models(*, resolved_models: List[Dict[str, object]], models_dir: pat
                 verify_models.atomic_copy(tmp_path, str(target_abs))
                 log_info(f"Модель '{name}' сохранена: {target_abs}")
         except Exception as exc:
-            raise RuntimeError(f"Не удалось загрузить модель '{name}': {exc}") from exc
+            raise RuntimeError(
+                f"Не удалось загрузить модель '{name}' (source={source}, target={target_abs}): {exc}"
+            ) from exc
 
 
 def _write_extra_model_paths(*, comfy_home: pathlib.Path, models_dir: pathlib.Path) -> None:
@@ -899,10 +930,18 @@ def _find_existing_model(
     target_abs: pathlib.Path,
     checksum_algo: Optional[str],
     checksum_hex: Optional[str],
+    search_depth_limit: int = 1000,
 ) -> Optional[pathlib.Path]:
     name = target_abs.name
     try:
-        candidates = list(models_dir.rglob(name))
+        candidates = []
+        for idx, candidate in enumerate(models_dir.rglob(name)):
+            if idx > search_depth_limit:
+                log_warn(
+                    f"Поиск модели '{name}' в MODELS_DIR достиг лимита {search_depth_limit}; остановка"
+                )
+                break
+            candidates.append(candidate)
     except Exception as exc:
         log_warn(f"Не удалось обойти MODELS_DIR при поиске модели {name}: {exc}")
         return None
