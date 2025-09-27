@@ -19,6 +19,20 @@
             "name": "ComfyUI-VideoHelperSuite",
             "repo": "https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite",
             "commit": "f54d0d102d0b6f3a9e08b07117fae8b9d189219d"
+        },
+        {
+            "name": "ComfyUI-Frame-Interpolation",
+            "repo": "https://github.com/Fannovel16/ComfyUI-Frame-Interpolation",
+            "commit": "main",
+            "target_dir": "$COMFY_HOME/custom_nodes/ComfyUI-Frame-Interpolation",
+            "install_requirements": true
+        },
+        {
+            "name": "ComfyUI-Easy-Use",
+            "repo": "https://github.com/yolain/ComfyUI-Easy-Use",
+            "commit": "main",
+            "target_dir": "$COMFY_HOME/custom_nodes/ComfyUI-Easy-Use",
+            "install_requirements": true
         }
     ],
     "env": {},
