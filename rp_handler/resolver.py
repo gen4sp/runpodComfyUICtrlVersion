@@ -12,7 +12,6 @@ from typing import Dict, List, Optional, Tuple
 from .utils import log_info, log_warn, log_error, run_command, expand_env_vars
 from scripts import verify_models
 from rp_handler.cache import (
-    models_cache_dir,
     nodes_cache_dir,
     comfy_cache_dir,
     resolved_cache_dir,
@@ -594,25 +593,22 @@ def _prepare_models(*, resolved_models: List[Dict[str, object]], models_dir: pat
                     )
             continue
 
-        cache_path: Optional[pathlib.Path] = None
-        try:
-            cache_path = verify_models.ensure_cached_model(
-                source=source,
+        existing_path: Optional[pathlib.Path] = None
+        if not target_abs.exists():
+            existing_path = _find_existing_model(
+                models_dir=models_dir,
+                target_abs=target_abs,
                 checksum_algo=checksum_algo,
                 checksum_hex=checksum_hex,
-                name=name,
-                offline=offline_effective,
             )
-        except RuntimeError as exc:
-            if offline_effective:
-                log_warn(f"Offline режим: {exc}")
-                continue
-            log_warn(f"Не удалось подготовить кеш модели '{name}': {exc}")
-
-        if cache_path:
-            status = verify_models.ensure_link_from_cache(cache_path, target_abs)
-            log_info(f"Модель '{name}': {status} ← {cache_path}")
-            continue
+            if existing_path:
+                try:
+                    verify_models.atomic_copy(str(existing_path), str(target_abs))
+                    log_info(f"Модель '{name}' скопирована из {existing_path}")
+                except Exception as exc:
+                    log_warn(f"Не удалось скопировать модель '{name}' из {existing_path}: {exc}")
+                else:
+                    continue
 
         if target_abs.exists():
             if checksum_hex and checksum_algo:
@@ -634,6 +630,10 @@ def _prepare_models(*, resolved_models: List[Dict[str, object]], models_dir: pat
             )
             continue
 
+        if not source:
+            log_warn(f"Модель '{name}' отсутствует по пути {target_abs} и не имеет source для загрузки")
+            continue
+
         try:
             with tempfile.TemporaryDirectory(prefix="model_fetch_", dir=str(models_dir)) as tmp_dir:
                 tmp_path = verify_models.fetch_to_temp(source, tmp_dir=tmp_dir, timeout=_MODEL_FETCH_TIMEOUT)
@@ -642,7 +642,7 @@ def _prepare_models(*, resolved_models: List[Dict[str, object]], models_dir: pat
                     if actual != checksum_hex:
                         raise RuntimeError("downloaded checksum mismatch")
                 verify_models.atomic_copy(tmp_path, str(target_abs))
-                log_info(f"Модель '{name}' загружена: {target_abs}")
+                log_info(f"Модель '{name}' сохранена: {target_abs}")
         except Exception as exc:
             raise RuntimeError(f"Не удалось загрузить модель '{name}': {exc}") from exc
 
@@ -891,6 +891,44 @@ def _resolve_python_interpreter(lock: Dict[str, object], verbose: bool = False) 
     if verbose:
         log_info(f"Using system Python interpreter: {sys_py}")
     return sys_py
+
+
+def _find_existing_model(
+    *,
+    models_dir: pathlib.Path,
+    target_abs: pathlib.Path,
+    checksum_algo: Optional[str],
+    checksum_hex: Optional[str],
+) -> Optional[pathlib.Path]:
+    name = target_abs.name
+    try:
+        candidates = list(models_dir.rglob(name))
+    except Exception as exc:
+        log_warn(f"Не удалось обойти MODELS_DIR при поиске модели {name}: {exc}")
+        return None
+
+    for candidate in candidates:
+        try:
+            if candidate.resolve() == target_abs.resolve():
+                continue
+        except Exception:
+            continue
+
+        if not candidate.is_file():
+            continue
+
+        if checksum_algo and checksum_hex:
+            try:
+                actual = verify_models.compute_checksum(str(candidate), algo=checksum_algo).split(":", 1)[1]
+            except Exception as exc:
+                log_warn(f"Не удалось вычислить checksum для кандидата {candidate}: {exc}")
+                continue
+            if actual != checksum_hex:
+                continue
+
+        return candidate
+
+    return None
 
 
 
