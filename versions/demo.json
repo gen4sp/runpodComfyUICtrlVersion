@@ -1,0 +1,13 @@
+{
+  "comfy": {
+    "commit": "196954ab8c55bc4ac48113686a57ce250677c7b5",
+    "ref": "master",
+    "repo": "https://github.com/comfyanonymous/ComfyUI"
+  },
+  "custom_nodes": [],
+  "env": {},
+  "models": [],
+  "options": {},
+  "schema_version": 2,
+  "version_id": "demo"
+}

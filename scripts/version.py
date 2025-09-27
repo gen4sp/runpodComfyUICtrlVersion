@@ -10,10 +10,15 @@ import os
 import pathlib
 import shutil
 import subprocess
+import sys
 import urllib.parse
 from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
+
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 from rp_handler import main as handler_main
 from rp_handler.main import spec_path_for_version
