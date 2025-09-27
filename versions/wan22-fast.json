@@ -12,8 +12,8 @@
         },
         {
             "name": "comfyui-wan-video",
-            "repo": "https://github.com/kijai/ComfyUI-WanVideo",
-            "commit": "1d94bb70b6c01a6fd1a5e3b2a42e28dd0dc70512"
+            "repo": "https://github.com/kijai/ComfyUI-WanVideoWrapper",
+            "commit": "37365817e82c3d6057fcb0a5d7f952f7376f096a"
         },
         {
             "name": "ComfyUI-VideoHelperSuite",
