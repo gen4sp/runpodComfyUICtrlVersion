@@ -7,81 +7,85 @@
     -   Pods с подключённым volume (персистентное хранилище для моделей/версий).
     -   Serverless (холодный старт, рекомендуется заранее запекать зависимости в образ).
 
-### Подготовка образа
+### Подготовка образа (serverless-only)
 
 ```bash
-./scripts/build_docker.sh --version "$COMFY_VERSION_NAME" --tag runpod-comfy:local
+./scripts/build_docker.sh --tag runpod-comfy:local
 # Загрузите образ в свой реестр (GHCR/AR/ECR/Docker Hub), если требуется.
 ```
 
-Переменные, которые использует handler:
+Переменные окружения:
 
 -   `COMFY_HOME` (по умолчанию `/workspace/ComfyUI` внутри контейнера) — корень окружения версии.
 -   `MODELS_DIR` (по умолчанию `$COMFY_HOME/models`) — каталог моделей; на Pod переопределите на `/runpod-volume/...`.
--   `COMFY_VERSION_NAME` — имя версии; по нему ищется спека `versions/<id>.json`.
 -   `OUTPUT_MODE` — `gcs` (по умолчанию) или `base64`.
 -   GCS: `GCS_BUCKET` (обязателен для `gcs`), `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`/`GCS_PROJECT`,
     `GCS_PREFIX` (по умолчанию `comfy/outputs`), `GCS_RETRIES` (3), `GCS_RETRY_BASE_SLEEP` (0.5), `GCS_PUBLIC` (false), `GCS_SIGNED_URL_TTL` (0), `GCS_VALIDATE` (true).
 
-### Pods (volume)
-
-1. Подготовьте Pod с volume, смонтированным в `/runpod-volume`.
-
-2. Рекомендуемые переменные окружения Pod (пример с volume `/runpod-volume`):
-
-```text
-COMFY_HOME=/runpod-volume/comfy
-MODELS_DIR=/runpod-volume/comfy/models
-COMFY_VERSION_NAME=<ваша_версия>
-OUTPUT_MODE=gcs
-GCS_BUCKET=<bucket>
-GOOGLE_APPLICATION_CREDENTIALS=/opt/creds/sa.json   # путь внутри контейнера
-GOOGLE_CLOUD_PROJECT=<gcp-project>
-GCS_PREFIX=comfy/outputs
-GCS_RETRIES=3
-GCS_RETRY_BASE_SLEEP=0.5
-GCS_PUBLIC=false
-GCS_SIGNED_URL_TTL=0
-GCS_VALIDATE=true
-```
-
-3. Права на volume: по умолчанию контейнер запускается от root, запись в `/runpod-volume` разрешена. Проверка:
-
-```bash
-ls -ld /runpod-volume
-mkdir -p /runpod-volume/comfy/models
-```
-
-4. Размещение спеки версии: включите `versions/<id>.json` в образ (`/app/versions`) или смонтируйте её.
-   Для автоматической развёртки окружения на volume используйте `scripts/version.py`:
-
-```bash
-# Пример быстрой развёртки версии на volume
-python3 /app/scripts/version.py realize "$COMFY_VERSION_NAME"
-# или с явным путём
-python3 /app/scripts/version.py realize "$COMFY_VERSION_NAME" --target /runpod-volume/comfy-$COMFY_VERSION_NAME
-```
-
-5. Smoke-тест (минимальный воркфлоу):
-
-```bash
-echo '{}' > /tmp/minimal.json
-python -m rp_handler.main \
-  --version-id "${COMFY_VERSION_NAME}" \
-  --workflow /tmp/minimal.json \
-  --output base64 | head -c 80; echo
-# Ожидается base64-строка (контент заглушки/воркфлоу).
-```
-
-При `--output gcs` команда выведет `gs://bucket/key` — ссылку на объект.
+Примечание: режим Pods (volume) не рассматривается — образ предназначен для RunPod Serverless.
 
 ### Serverless
 
--   Базовый образ и handler рассчитаны на **CLI-вызов** (`python -m rp_handler.main ...`).
--   Для Serverless рекомендуется тонкий адаптер, который маппит входной JSON RunPod job → аргументы CLI.
-    На данном этапе можно:
-    -   Задать команду запуска контейнера с нужными аргументами (`CMD`/`Args`) либо
-    -   Подготовить собственный мини-скрипт-обёртку в образе.
+-   Образ включает тонкий адаптер: `rp_handler.serverless`.
+-   Запуск: первый аргумент `serverless` или переменная `RUNPOD_SERVERLESS=1`.
+
+Схема payload (RunPod job `input`):
+
+```json
+{
+    "version_id": "wan22-fast",
+    "workflow": { "nodes": {} },
+    "workflow_url": "https://.../workflow.json",
+    "output_mode": "gcs",
+    "gcs_bucket": "<bucket>",
+    "gcs_prefix": "comfy/outputs",
+    "models_dir": "/workspace/models",
+    "verbose": false
+}
+```
+
+-   `version_id` — обязательно; должен соответствовать файлу `versions/<id>.json` (файл должен быть смонтирован или включён в образ произвольно; образ общий, не привязан к версии).
+-   `workflow` — объект JSON или строка JSON. Альтернатива: `workflow_url` (HTTP/HTTPS URL на JSON).
+-   `output_mode` — `gcs` (по умолчанию) или `base64`.
+-   Для `gcs`: укажите `GCS_BUCKET`/`gcs_bucket` и креды (`GOOGLE_APPLICATION_CREDENTIALS` указывает на путь к JSON в контейнере).
+-   `models_dir` — необязательно; по умолчанию `/workspace/models`.
+
+Запуск образа в RunPod Serverless:
+
+1. Соберите и (при необходимости) загрузите образ в реестр:
+
+```bash
+./scripts/build_docker.sh --tag <registry>/<image>:<tag>
+# docker push <registry>/<image>:<tag>
+```
+
+2. В шаблоне Serverless укажите:
+
+    - Image: `<registry>/<image>:<tag>`
+    - Command/Args: `serverless`
+    - Env:
+        - `OUTPUT_MODE=gcs` (или `base64`)
+        - `GCS_BUCKET=<bucket>`
+        - `GOOGLE_APPLICATION_CREDENTIALS=/opt/creds/sa.json` (и положите файл в образ/секрет)
+        - опционально `GCS_PREFIX`, `GCS_PUBLIC`, `GCS_SIGNED_URL_TTL`
+
+3. Отправка задания (пример тела запроса):
+
+```json
+{
+    "input": {
+        "version_id": "wan22-fast",
+        "workflow_url": "https://example.com/workflows/wan22-fast.json",
+        "output_mode": "gcs",
+        "gcs_bucket": "<bucket>"
+    }
+}
+```
+
+Возвращаемое значение:
+
+-   `output_mode=gcs`: `{ "gcs_url": "gs://bucket/key", "size": <bytes>, ... }`
+-   `output_mode=base64`: `{ "base64": "...", "size": <bytes> }`
 
 Оптимизация холодного старта:
 

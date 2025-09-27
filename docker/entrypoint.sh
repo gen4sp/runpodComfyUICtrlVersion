@@ -13,13 +13,43 @@ log_ok() { printf "%b[OK]%b %s\n" "$GREEN" "$NC" "$*"; }
 
 log_info "COMFY_HOME=$COMFY_HOME"
 log_info "MODELS_DIR=$MODELS_DIR"
-SPEC_PATH_DEFAULT="/app/versions/${COMFY_VERSION_NAME:-default}.json"
-SPEC_PATH="${VERSION_SPEC_PATH:-$SPEC_PATH_DEFAULT}"
-log_info "VERSION_SPEC_PATH=$SPEC_PATH"
 
-if [ ! -f "$SPEC_PATH" ]; then
-  log_warn "Spec-файл не найден: $SPEC_PATH"
-  log_warn "Передайте --version-id или смонтируйте versions/<id>.json"
+first_arg="${1:-}"
+
+# Простейшая проверка truthy значений для RUNPOD_SERVERLESS
+runpod_serverless_flag="${RUNPOD_SERVERLESS:-}"
+case "${runpod_serverless_flag,,}" in
+  1|true|yes|on)
+    force_serverless=1
+    ;;
+  *)
+    force_serverless=0
+    ;;
+esac
+
+if [ -z "$first_arg" ]; then
+  first_arg="serverless"
 fi
 
-exec python -m rp_handler.main "$@"
+case "$first_arg" in
+  serverless)
+    if [ $# -gt 0 ]; then
+      shift
+    fi
+    log_info "Starting serverless adapter"
+    exec python -m rp_handler.serverless "$@"
+    ;;
+  cli)
+    shift || true
+    log_info "Starting CLI handler"
+    exec python -m rp_handler.main "$@"
+    ;;
+  *)
+    if [ "$force_serverless" = "1" ]; then
+      log_info "RUNPOD_SERVERLESS=true — принудительно запускаю serverless"
+      exec python -m rp_handler.serverless "$@"
+    else
+      exec python -m rp_handler.main "$@"
+    fi
+    ;;
+esac

@@ -3,15 +3,12 @@
 # Мультиархитектурный базовый образ Python 3.11 slim
 FROM python:3.11-slim AS runtime
 
-ARG COMFY_VERSION_NAME=default
-
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     COMFY_HOME=/workspace/ComfyUI \
-    MODELS_DIR=/workspace/models \
-    COMFY_VERSION_NAME=${COMFY_VERSION_NAME}
+    MODELS_DIR=/workspace/models
 
 WORKDIR /app
 
@@ -30,7 +27,8 @@ RUN apt-get update -y && \
 # Копируем скрипты и handler внутрь образа
 COPY scripts/ /app/scripts/
 COPY rp_handler/ /app/rp_handler/
-COPY versions/ /app/versions/
+# Версии теперь передаются только через payload (version_id); каталог versions может быть смонтирован при необходимости
+# COPY versions/ /app/versions/
 
 # Создаём директории для COMFY_HOME и моделей
 RUN mkdir -p "$COMFY_HOME" "$MODELS_DIR"
@@ -40,7 +38,8 @@ RUN mkdir -p "$COMFY_HOME" "$MODELS_DIR"
 RUN python -m pip install --upgrade pip setuptools wheel && \
     python -m pip install \
       pyyaml \
-      google-cloud-storage || true
+      google-cloud-storage \
+      runpod || true
 
 # Добавляем entrypoint
 COPY docker/entrypoint.sh /entrypoint.sh
