@@ -4,23 +4,23 @@
         "ref": "master",
         "repo": "https://github.com/comfyanonymous/ComfyUI"
     },
-  "custom_nodes": [
-    {
-      "name": "was-node-suite-comfyui",
-      "repo": "https://github.com/WASasquatch/was-node-suite-comfyui",
-      "commit": "e3bce1376bce1c1d4ac0d5d0ce8beafccfb67fd5"
-    },
-    {
-      "name": "comfyui-wan-video",
-      "repo": "https://github.com/kijai/ComfyUI-WanVideo",
-      "commit": "1d94bb70b6c01a6fd1a5e3b2a42e28dd0dc70512"
-    },
-    {
-      "name": "ComfyUI-VideoHelperSuite",
-      "repo": "https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite",
-      "commit": "f54d0d102d0b6f3a9e08b07117fae8b9d189219d"
-    }
-  ],
+    "custom_nodes": [
+        {
+            "name": "was-node-suite-comfyui",
+            "repo": "https://github.com/WASasquatch/was-node-suite-comfyui",
+            "commit": "e3bce1376bce1c1d4ac0d5d0ce8beafccfb67fd5"
+        },
+        {
+            "name": "comfyui-wan-video",
+            "repo": "https://github.com/kijai/ComfyUI-WanVideo",
+            "commit": "1d94bb70b6c01a6fd1a5e3b2a42e28dd0dc70512"
+        },
+        {
+            "name": "ComfyUI-VideoHelperSuite",
+            "repo": "https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite",
+            "commit": "f54d0d102d0b6f3a9e08b07117fae8b9d189219d"
+        }
+    ],
     "env": {},
     "models": [
         {
