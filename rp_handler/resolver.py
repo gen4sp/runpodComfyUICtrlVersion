@@ -358,36 +358,22 @@ def _install_custom_node_dependencies(
             continue
 
         requirements_path = node_dir / "requirements.txt"
-        pyproject_path = node_dir / "pyproject.toml"
 
-        use_pyproject = False
-        install_key: Optional[pathlib.Path] = None
-        cmd_extra: List[str]
-
-        if requirements_path.exists():
-            try:
-                install_key = requirements_path.resolve()
-            except OSError:
-                install_key = requirements_path
-            cmd_extra = ["-r", str(requirements_path)]
-        elif pyproject_path.exists():
-            use_pyproject = True
-            try:
-                install_key = node_dir.resolve()
-            except OSError:
-                install_key = node_dir
-            cmd_extra = [str(node_dir)]
-        else:
+        if not requirements_path.exists():
             continue
+
+        try:
+            install_key = requirements_path.resolve()
+        except OSError:
+            install_key = requirements_path
 
         if install_key in processed:
             continue
         processed.add(install_key)
 
-        cmd = [python_exe, "-m", "pip", "install"]
+        cmd = [python_exe, "-m", "pip", "install", "-r", str(requirements_path)]
         if wheels_dir:
             cmd.extend(["--no-index", "--find-links", str(wheels_dir)])
-        cmd.extend(cmd_extra)
 
         code, out, err = run_command(cmd)
         if code != 0:
