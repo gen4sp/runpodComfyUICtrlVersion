@@ -1,0 +1,59 @@
+{
+    "comfy": {
+        "commit": "196954ab8c55bc4ac48113686a57ce250677c7b5",
+        "ref": "master",
+        "repo": "https://github.com/comfyanonymous/ComfyUI"
+    },
+    "custom_nodes": [
+        {
+            "name": "was-node-suite-comfyui",
+            "repo": "https://github.com/WASasquatch/was-node-suite-comfyui",
+            "commit": "e3bce1376bce1c1d4ac0d5d0ce8beafccfb67fd5"
+        },
+        {
+            "name": "comfyui-wan-video",
+            "repo": "https://github.com/kijai/ComfyUI-WanVideoWrapper",
+            "commit": "37365817e82c3d6057fcb0a5d7f952f7376f096a"
+        },
+        {
+            "name": "ComfyUI-VideoHelperSuite",
+            "repo": "https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite",
+            "commit": "f54d0d102d0b6f3a9e08b07117fae8b9d189219d"
+        },
+        {
+            "name": "ComfyUI-Frame-Interpolation",
+            "repo": "https://github.com/Fannovel16/ComfyUI-Frame-Interpolation",
+            "commit": "main",
+            "target_dir": "$COMFY_HOME/custom_nodes/ComfyUI-Frame-Interpolation",
+            "install_requirements": true
+        },
+        {
+            "name": "ComfyUI-Easy-Use",
+            "repo": "https://github.com/yolain/ComfyUI-Easy-Use",
+            "commit": "main",
+            "target_dir": "$COMFY_HOME/custom_nodes/ComfyUI-Easy-Use",
+            "install_requirements": true
+        }
+    ],
+    "env": {},
+    "models": [
+        {
+            "name": "wav2vec2_large_english_fp16.safetensors",
+            "source": "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/audio_encoders/wav2vec2_large_english_fp16.safetensors",
+            "target_path": "$MODELS_DIR/audio_encoders/wav2vec2_large_english_fp16.safetensors"
+        },
+        {
+            "name": "wav2vec2_large_english_fp32.safetensors",
+            "source": "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors",
+            "target_path": "$MODELS_DIR/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors"
+        },
+        {
+            "name": "wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors",
+            "source": "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_s2v_14B_fp8_scaled.safetensors",
+            "target_path": "$MODELS_DIR/diffusion_models/wan2.2_s2v_14B_fp8_scaled.safetensors"
+        }
+    ],
+    "options": {},
+    "schema_version": 2,
+    "version_id": "wan22-s2v"
+}

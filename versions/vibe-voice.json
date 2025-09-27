@@ -1,0 +1,19 @@
+{
+    "comfy": {
+        "commit": "196954ab8c55bc4ac48113686a57ce250677c7b5",
+        "ref": "master",
+        "repo": "https://github.com/comfyanonymous/ComfyUI"
+    },
+    "custom_nodes": [
+        {
+            "name": "VibeVoice-ComfyUI",
+            "repo": "https://github.com/Enemyx-net/VibeVoice-ComfyUI",
+            "commit": "main"
+        }
+    ],
+    "env": {},
+    "models": [{}],
+    "options": {},
+    "schema_version": 2,
+    "version_id": "wan22-fast"
+}
