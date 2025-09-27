@@ -51,12 +51,12 @@
         {
             "name": "wan2.2-t2v-high-noise-14b-fp8-scaled",
             "source": "hf://Comfy-Org/Wan_2.2_ComfyUI_Repackaged/split_files/diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
-            "target_path": "$MODELS_DIR/unet/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors"
+            "target_path": "$MODELS_DIR/diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors"
         },
         {
             "name": "wan2.2-t2v-low-noise-14b-fp8-scaled",
             "source": "hf://Comfy-Org/Wan_2.2_ComfyUI_Repackaged/split_files/diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
-            "target_path": "$MODELS_DIR/unet/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors"
+            "target_path": "$MODELS_DIR/diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors"
         },
         {
             "name": "wan2.2-vae",
