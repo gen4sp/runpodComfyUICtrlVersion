@@ -7,7 +7,7 @@ import pathlib
 import shutil
 import sys
 import tempfile
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from .utils import log_info, log_warn, log_error, run_command, expand_env_vars
 from scripts import verify_models
@@ -329,6 +329,74 @@ def _ensure_symlink(src: pathlib.Path, dst: pathlib.Path) -> None:
         pass
 
 
+def _install_custom_node_dependencies(
+    *,
+    python_exe: str,
+    comfy_home: pathlib.Path,
+    wheels_dir: Optional[pathlib.Path],
+    offline: bool,
+) -> None:
+    if offline:
+        return
+
+    custom_nodes_dir = comfy_home / "custom_nodes"
+    try:
+        entries = sorted(custom_nodes_dir.iterdir())
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        log_warn(f"Не удалось прочитать custom_nodes: {exc}")
+        return
+
+    processed: Set[pathlib.Path] = set()
+
+    for node_dir in entries:
+        try:
+            if not node_dir.is_dir():
+                continue
+        except OSError:
+            continue
+
+        requirements_path = node_dir / "requirements.txt"
+        pyproject_path = node_dir / "pyproject.toml"
+
+        use_pyproject = False
+        install_key: Optional[pathlib.Path] = None
+        cmd_extra: List[str]
+
+        if requirements_path.exists():
+            try:
+                install_key = requirements_path.resolve()
+            except OSError:
+                install_key = requirements_path
+            cmd_extra = ["-r", str(requirements_path)]
+        elif pyproject_path.exists():
+            use_pyproject = True
+            try:
+                install_key = node_dir.resolve()
+            except OSError:
+                install_key = node_dir
+            cmd_extra = [str(node_dir)]
+        else:
+            continue
+
+        if install_key in processed:
+            continue
+        processed.add(install_key)
+
+        cmd = [python_exe, "-m", "pip", "install"]
+        if wheels_dir:
+            cmd.extend(["--no-index", "--find-links", str(wheels_dir)])
+        cmd.extend(cmd_extra)
+
+        code, out, err = run_command(cmd)
+        if code != 0:
+            node_name = node_dir.name
+            log_warn(
+                f"pip install для custom-ноды {node_name} завершился с кодом {code}: {err or out}"
+            )
+
+
 def resolve_version_spec(spec_path: pathlib.Path, offline: bool = False) -> Dict[str, object]:
     """Load versions/<id>.json, resolve missing commits, and return resolved dict.
 
@@ -521,26 +589,13 @@ def realize_from_resolved(
             # Symlink into COMFY_HOME
             dst = repo_dir / "custom_nodes" / n_name
             _ensure_symlink(cache_path, dst)
-            # Optional: auto-install requirements for node
-            if not offline:
-                node_req = cache_path / "requirements.txt"
-                node_proj = cache_path / "pyproject.toml"
-                if node_req.exists():
-                    cmd = [py, "-m", "pip", "install"]
-                    if wheels_dir:
-                        cmd.extend(["--no-index", "--find-links", str(wheels_dir)])
-                    cmd.extend(["-r", str(node_req)])
-                    code, out, err = run_command(cmd)
-                    if code != 0:
-                        log_warn(f"pip install for node {n_name} failed: {err or out}")
-                elif node_proj.exists():
-                    cmd = [py, "-m", "pip", "install"]
-                    if wheels_dir:
-                        cmd.extend(["--no-index", "--find-links", str(wheels_dir)])
-                    cmd.append(str(cache_path))
-                    code, out, err = run_command(cmd)
-                    if code != 0:
-                        log_warn(f"pip install (pyproject) for node {n_name} failed: {err or out}")
+
+    _install_custom_node_dependencies(
+        python_exe=py,
+        comfy_home=comfy_home,
+        wheels_dir=wheels_dir,
+        offline=offline,
+    )
 
     # Models: сверяем с кешем и создаём симлинки
     _prepare_models(
