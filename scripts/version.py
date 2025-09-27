@@ -523,7 +523,7 @@ def cmd_run_ui(args: argparse.Namespace) -> int:
     _update_runtime_env(comfy_home, effective_models_dir)
 
     python_exe = _venv_python_from_env() or _select_python_executable()
-    main_py = comfy_home / "ComfyUI" / "main.py"
+    main_py = comfy_home / "main.py"
     if not main_py.exists():
         print(f"[ERROR] Не найден ComfyUI main.py: {main_py}")
         return 2

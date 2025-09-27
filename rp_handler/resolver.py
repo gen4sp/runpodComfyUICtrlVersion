@@ -303,8 +303,8 @@ def _checkout_from_cache(
             raise RuntimeError(f"Коммит {commit} отсутствует в кешовом репозитории {cache_repo}")
 
     # Обновить локальную копию из кеша (без обращения в сеть)
-    run_command(["git", "-C", str(target_repo), "remote", "set-url", "origin", str(cache_repo)])
-    run_command(["git", "-C", str(target_repo), "fetch", "origin", "--tags", "-q"])
+        run_command(["git", "-C", str(target_repo), "remote", "set-url", "origin", str(cache_repo)])
+        run_command(["git", "-C", str(target_repo), "fetch", "origin", "--tags", "-q"])
 
     checkout_target = commit or "HEAD"
     code, out, err = run_command(["git", "-C", str(target_repo), "checkout", "--force", checkout_target])
@@ -453,8 +453,7 @@ def realize_from_resolved(
     models_dir = (models_dir_override or _models_dir_default(comfy_home)).resolve()
 
     # Ensure base dirs
-    (comfy_home / "ComfyUI").mkdir(parents=True, exist_ok=True)
-    (comfy_home / "ComfyUI" / "custom_nodes").mkdir(parents=True, exist_ok=True)
+    comfy_home.mkdir(parents=True, exist_ok=True)
     models_dir.mkdir(parents=True, exist_ok=True)
 
     # Clone or update ComfyUI
@@ -463,7 +462,7 @@ def realize_from_resolved(
     commit = comfy.get("commit") if isinstance(comfy, dict) else None
     if not isinstance(repo, str) or not repo:
         raise RuntimeError("Resolved comfy.repo is required")
-    repo_dir = comfy_home / "ComfyUI"
+    repo_dir = comfy_home
     cache_repo = _ensure_repo_cache(repo, offline=offline)
     try:
         _checkout_from_cache(
@@ -474,6 +473,9 @@ def realize_from_resolved(
         )
     except RuntimeError as exc:
         raise RuntimeError(f"Не удалось подготовить ComfyUI в {repo_dir}: {exc}")
+
+    # Ensure custom_nodes directory exists in checkout (may be absent in repo for fresh clone)
+    (repo_dir / "custom_nodes").mkdir(parents=True, exist_ok=True)
 
     # Autoinstall ComfyUI requirements
     py = _venv_python_from_env() or _select_python_executable()
