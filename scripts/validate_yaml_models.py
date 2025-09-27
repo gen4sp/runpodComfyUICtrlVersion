@@ -558,7 +558,7 @@ class VerifyResult:
 
 
 def load_yaml_models(yaml_path: str) -> List[Dict[str, object]]:
-    """Load models from YAML file similar to create_version.py logic."""
+    """Load models from YAML file."""
     try:
         import yaml  # type: ignore
     except Exception as exc:

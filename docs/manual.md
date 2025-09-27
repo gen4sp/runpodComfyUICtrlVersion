@@ -12,7 +12,7 @@
 ### Основные сущности
 
 -   `versions/<id>.json` — описание версии (ядро, кастом-ноды, модели, опции).
--   `COMFY_HOME` — каталог развёрнутой версии (по умолчанию `/runpod-volume/comfy-<id>` или `~/comfy-<id>`).
+-   `COMFY_HOME` — каталог развёрнутой версии (если переменная не задана, внутри образа используется `/opt/comfy`, локально — `~/comfy-<id>`).
 -   `MODELS_DIR` — каталог моделей. По умолчанию общий кеш `COMFY_CACHE_ROOT/models`.
 
 ### Шаги
@@ -39,10 +39,10 @@
 3. **Развёртывание окружения**
 
     ```bash
-    python3 scripts/version.py realize demo --target /runpod-volume/comfy-demo
+    python3 scripts/version.py realize demo
     ```
 
-    Скрипт клонирует ComfyUI и кастом-ноды в кеш, создаёт симлинки моделей, устанавливает `requirements.txt`.
+    Скрипт клонирует ComfyUI и кастом-ноды в кеш, создаёт симлинки моделей, устанавливает `requirements.txt`. Для Pod с volume задайте `COMFY_HOME=/runpod-volume/comfy-demo` или используйте `--target /runpod-volume/comfy-demo`.
 
 4. **Запуск UI**
 

@@ -27,10 +27,10 @@
     python3 scripts/version.py validate my-version
     ```
 
-3. Разверните окружение (по умолчанию в `/runpod-volume/comfy-<id>` или `~/comfy-<id>`):
+3. Разверните окружение (внутри образа по умолчанию `/opt/comfy`, локально `~/comfy-<id>`):
 
     ```bash
-    python3 scripts/version.py realize my-version
+    COMFY_HOME=~/comfy-my-version python3 scripts/version.py realize my-version
     ```
 
 4. Запустите UI или handler:

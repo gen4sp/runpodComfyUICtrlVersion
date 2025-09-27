@@ -13,7 +13,7 @@
 
 | Переменная | Назначение |
 | --- | --- |
-| `COMFY_HOME` | Принудительный путь развёрнутой версии. По умолчанию `/runpod-volume/comfy-<id>` или `~/comfy-<id>`. |
+| `COMFY_HOME` | Путь развёрнутой версии. Если переменная не задана — внутри образа используется `/opt/comfy`, локально `~/comfy-<id>`. |
 | `MODELS_DIR` | Путь к моделям. Если не указан — используется общий кеш `COMFY_CACHE_ROOT/models`. |
 | `COMFY_CACHE_ROOT` | Базовый каталог кеша (по умолчанию `~/.cache/runpod-comfy`). |
 | `COMFY_OFFLINE` | Если `true`, resolver/realizer не выполняют сетевые операции (коммиты и модели должны быть уже в кеше). |
@@ -45,10 +45,10 @@ python3 scripts/version.py validate wan-demo
 ### Развёртывание окружения
 
 ```bash
-python3 scripts/version.py realize wan-demo --target /runpod-volume/comfy-wan
+COMFY_HOME=~/comfy-wan python3 scripts/version.py realize wan-demo
 ```
 
-По умолчанию целевой путь вычисляется автоматически. Для оффлайн-режима добавьте `--offline`. Опция `--wheels-dir` позволяет указывать каталог с wheel-ами для `pip install` без доступа к интернету.
+По умолчанию целевой путь вычисляется автоматически (внутри контейнера — `/opt/comfy`). Для Pod с volume укажите `COMFY_HOME=/runpod-volume/comfy-wan` или `--target /runpod-volume/comfy-wan`. Для оффлайн-режима добавьте `--offline`. Опция `--wheels-dir` позволяет указывать каталог с wheel-ами для `pip install` без доступа к интернету.
 
 ### Запуск UI
 
