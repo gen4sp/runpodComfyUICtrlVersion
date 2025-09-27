@@ -594,7 +594,11 @@ def realize_from_resolved(
     # Export env
     os.environ["COMFY_HOME"] = str(comfy_home)
     os.environ["MODELS_DIR"] = str(models_dir)
-    _write_extra_model_paths(comfy_home=comfy_home, models_dir=models_dir)
+    _write_extra_model_paths(
+        comfy_home=comfy_home,
+        models_dir=models_dir,
+        resolved_models=resolved.get("models"),
+    )
     return comfy_home, models_dir
 
 
@@ -721,25 +725,66 @@ def _prepare_models(
             ) from exc
 
 
-def _write_extra_model_paths(*, comfy_home: pathlib.Path, models_dir: pathlib.Path) -> None:
+def _write_extra_model_paths(
+    *,
+    comfy_home: pathlib.Path,
+    models_dir: pathlib.Path,
+    resolved_models: Optional[List[Dict[str, object]]],
+) -> None:
     extra_yaml = comfy_home / "extra_model_paths.yaml"
     mapping = {
         "base_path": str(models_dir),
-        "checkpoints": str(models_dir / "checkpoints"),
-        "clip": str(models_dir / "clip"),
-        "clip_vision": str(models_dir / "clip_vision"),
-        "configs": str(models_dir / "configs"),
-        "controlnet": str(models_dir / "controlnet"),
-        "diffusion_models": str(models_dir / "diffusion_models"),
-        "embeddings": str(models_dir / "embeddings"),
-        "inpaint": str(models_dir / "inpaint"),
-        "loras": str(models_dir / "loras"),
-        "photomaker": str(models_dir / "photomaker"),
-        "text_encoders": str(models_dir / "text_encoders"),
-        "unet": str(models_dir / "unet"),
-        "upscale_models": str(models_dir / "upscale_models"),
-        "vae": str(models_dir / "vae"),
     }
+
+    default_subdirs = [
+        "audio_encoders",
+        "checkpoints",
+        "clip",
+        "clip_vision",
+        "configs",
+        "controlnet",
+        "diffusion_models",
+        "embeddings",
+        "inpaint",
+        "loras",
+        "photomaker",
+        "text_encoders",
+        "unet",
+        "upscale_models",
+        "vae",
+    ]
+
+    for subdir in default_subdirs:
+        mapping[subdir] = str(models_dir / subdir)
+
+    if resolved_models:
+        for model in resolved_models:
+            if not isinstance(model, dict):
+                continue
+            target_path_raw = str(model.get("target_path") or "").strip()
+            if not target_path_raw:
+                continue
+            target_path = pathlib.Path(target_path_raw)
+            relative_root: Optional[pathlib.Path]
+            if target_path.is_absolute():
+                try:
+                    relative_root = target_path.relative_to(models_dir)
+                except ValueError:
+                    relative_root = None
+            else:
+                relative_root = target_path
+
+            if relative_root is None:
+                continue
+
+            parts = list(relative_root.parts)
+            current = pathlib.Path()
+            for part in parts[:-1]:
+                current = current / part
+                key = str(current)
+                if key:
+                    mapping.setdefault(key, str(models_dir / current))
+
     try:
         lines = ["comfyui:\n"]
         for key in sorted(mapping.keys()):
