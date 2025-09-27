@@ -111,6 +111,11 @@
             "name": "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
             "source": "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
             "target_path": "$MODELS_DIR/diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors"
+        },
+        {
+            "name": "wan14b_SmartphoneSnapshotPhotoReality_v1_by-AI_Characters.safetensors",
+            "source": "https://huggingface.co/Sageen/CTAI_1/resolve/main/WAN2.1_SmartphoneSnapshotPhotoReality_v1_by-AI_Characters/WAN2.1_SmartphoneSnapshotPhotoReality_v1_by-AI_Characters.safetensors",
+            "target_path": "$MODELS_DIR/loras/wan14b_SmartphoneSnapshotPhotoReality_v1_by-AI_Characters.safetensors"
         }
     ],
     "options": {},
