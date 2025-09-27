@@ -749,13 +749,22 @@ def validate_version_spec(raw_spec: object, source_path: pathlib.Path) -> Dict[s
         target_subdir_value = _optional_trimmed_str(
             entry.get("target_subdir"), source_path, f"models[{idx}].target_subdir"
         )
-        models.append(
-            {
-                "source": source_value.strip(),
-                "name": name_value,
-                "target_subdir": target_subdir_value,
-            }
+        target_path_value = _optional_trimmed_str(
+            entry.get("target_path"), source_path, f"models[{idx}].target_path"
         )
+        path_value = _optional_trimmed_str(entry.get("path"), source_path, f"models[{idx}].path")
+
+        model_entry: Dict[str, Optional[str]] = {
+            "source": source_value.strip(),
+            "name": name_value,
+            "target_subdir": target_subdir_value,
+            "target_path": target_path_value,
+        }
+
+        if path_value is not None:
+            model_entry["path"] = path_value
+
+        models.append(model_entry)
 
     env_raw = raw_spec.get("env", {})
     if env_raw is None:
