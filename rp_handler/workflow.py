@@ -211,6 +211,7 @@ class ComfyUIWorkflowRunner:
             if self.verbose:
                 log_info("[workflow] подготовка запуска ComfyUI")
             self._start_comfyui()
+            self._wait_for_comfyui()
             
             # 3. Загрузить и отправить workflow
             workflow_data = json.loads(pathlib.Path(workflow_path).read_text(encoding='utf-8'))
