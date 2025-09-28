@@ -539,13 +539,18 @@ def realize_from_resolved(
         raise RuntimeError("Resolved comfy.repo is required")
     repo_dir = comfy_home
  
+    lock_path = resolved_cache_dir() / f"{version_id}.lock.json"
+    lock = load_lock(str(lock_path)) if lock_path.exists() else {}
+
+    locked_interpreter = _select_python_from_lock(lock)
+
     signature = _signature_from_resolved(resolved)
     marker = _load_prepared_marker(comfy_home)
- 
+
     should_prepare = marker != signature
     if not should_prepare:
         log_info("[resolver] найден маркер подготовленного окружения, пропускаю повторную установку")
- 
+
     if should_prepare:
         log_info(f"[resolver] готовлю ComfyUI из {repo} (commit={commit})")
         cache_repo = _ensure_repo_cache(repo, offline=offline)
@@ -567,7 +572,13 @@ def realize_from_resolved(
     # Autoinstall ComfyUI requirements (используем venv внутри COMFY_HOME, если возможно)
     comfy_verbose = str(os.environ.get("COMFY_VERBOSE", "")).strip().lower() in {"1", "true", "yes", "on"}
     ensured_py = _ensure_comfy_venv(comfy_home, verbose=comfy_verbose)
-    py = ensured_py or _venv_python_from_env() or _select_python_executable()
+    if ensured_py:
+        py = ensured_py
+    elif locked_interpreter:
+        py = locked_interpreter
+    else:
+        env_py = _venv_python_from_env()
+        py = env_py or _select_python_executable()
     log_info(f"[resolver] выбран интерпретатор Python: {py}")
     req = repo_dir / "requirements.txt"
     if should_prepare and req.exists() and not offline:
@@ -1079,6 +1090,21 @@ def _resolve_python_interpreter(lock: Dict[str, object], verbose: bool = False) 
     if verbose:
         log_info(f"Using system Python interpreter: {sys_py}")
     return sys_py
+
+
+def _select_python_from_lock(lock: Dict[str, object]) -> Optional[str]:
+    if not isinstance(lock, dict):
+        return None
+    python = lock.get("python")
+    if not isinstance(python, dict):
+        return None
+    interpreter = python.get("interpreter")
+    if not isinstance(interpreter, str) or not interpreter:
+        return None
+    path = pathlib.Path(interpreter)
+    if path.exists() and os.access(str(path), os.X_OK):
+        return str(path)
+    return None
 
 
 def _find_existing_model(

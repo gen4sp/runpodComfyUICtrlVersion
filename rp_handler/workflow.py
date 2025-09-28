@@ -7,20 +7,25 @@ import pathlib
 import subprocess
 import time
 import urllib.request
-from typing import Dict, List, Optional, Tuple
+from typing import Deque, Dict, List, Optional, Tuple, IO
+import threading
+from collections import deque
 
 from .utils import log_info, log_warn, log_error, run_command, validate_required_path
 
 
 class ComfyUIWorkflowRunner:
     """Раннер для выполнения ComfyUI workflow в headless режиме."""
-    
+
     def __init__(self, comfy_home: str, models_dir: str, verbose: bool = False):
         self.comfy_home = pathlib.Path(comfy_home)
         self.models_dir = pathlib.Path(models_dir)
         self.verbose = verbose
         self.process: Optional[subprocess.Popen] = None
         self.api_url = "http://127.0.0.1:8188"
+        self._log_tail: deque[str] = deque(maxlen=20)
+        self._reader_threads: List[threading.Thread] = []
+        self._reader_stop = threading.Event()
         
     def _prepare_directories(self) -> None:
         """Подготовить необходимые директории."""
@@ -37,6 +42,42 @@ class ComfyUIWorkflowRunner:
             if self.verbose:
                 log_info(f"[workflow] подготовлена директория: {dir_path}")
     
+    def _create_process(self, cmd: List[str], env: Dict[str, str]) -> subprocess.Popen:
+        return subprocess.Popen(
+            cmd,
+            cwd=str(self.comfy_home),
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
+
+    def _spawn_reader(self, stream: IO[str], label: str) -> None:
+        def reader() -> None:
+            while not self._reader_stop.is_set():
+                line = stream.readline()
+                if not line:
+                    if self.process and self.process.poll() is not None:
+                        break
+                    time.sleep(0.1)
+                    continue
+                text = line.rstrip()
+                if text:
+                    log_info(f"[workflow:{label}] {text}")
+                    self._log_tail.append(text)
+
+        thread = threading.Thread(target=reader, daemon=True)
+        thread.start()
+        self._reader_threads.append(thread)
+
+    def _stop_readers(self) -> None:
+        self._reader_stop.set()
+        for thread in self._reader_threads:
+            thread.join(timeout=1.0)
+        self._reader_threads.clear()
+        self._reader_stop.clear()
+
     def _start_comfyui(self) -> None:
         """Запустить ComfyUI в headless режиме."""
         main_script = self.comfy_home / "main.py"
@@ -59,19 +100,10 @@ class ComfyUIWorkflowRunner:
         if self.verbose:
             log_info(f"[workflow] старт ComfyUI: {' '.join(cmd)}")
         
-        stdout_target = None if self.verbose else subprocess.DEVNULL
-        stderr_target = None if self.verbose else subprocess.DEVNULL
-
-        self.process = subprocess.Popen(
-            cmd,
-            cwd=str(self.comfy_home),
-            env=env,
-            stdout=stdout_target,
-            stderr=stderr_target,
-        )
-        
-        # Ждем запуска ComfyUI
-        self._wait_for_comfyui()
+        self.process = self._create_process(cmd, env)
+        assert self.process.stdout and self.process.stderr
+        self._spawn_reader(self.process.stdout, "stdout")
+        self._spawn_reader(self.process.stderr, "stderr")
     
     def _wait_for_comfyui(self, timeout: int = 60) -> None:
         """Дождаться запуска ComfyUI."""
@@ -89,7 +121,9 @@ class ComfyUIWorkflowRunner:
                 pass
             time.sleep(1)
         
-        raise RuntimeError(f"ComfyUI failed to start within {timeout} seconds")
+        raise RuntimeError(
+            f"ComfyUI failed to start within {timeout} seconds. Последние строки: {' | '.join(list(self._log_tail))}"
+        )
     
     def _submit_workflow(self, workflow_data: Dict) -> str:
         """Отправить workflow в ComfyUI и получить prompt_id."""
@@ -191,6 +225,7 @@ class ComfyUIWorkflowRunner:
             return artifacts
             
         finally:
+            self._stop_readers()
             # Остановить ComfyUI
             if self.process:
                 self.process.terminate()
