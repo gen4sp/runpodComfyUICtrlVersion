@@ -14,6 +14,16 @@ log_ok() { printf "%b[OK]%b %s\n" "$GREEN" "$NC" "$*"; }
 log_info "COMFY_HOME=$COMFY_HOME"
 log_info "MODELS_DIR=$MODELS_DIR"
 
+log_info "ENTRYPOINT_ARGS=$*"
+
+if [ -n "${RUNPOD_TEMPLATE_ID:-}" ]; then
+  log_info "RUNPOD_TEMPLATE_ID=${RUNPOD_TEMPLATE_ID}"
+fi
+
+if [ -n "${RUNPOD_SERVERLESS:-}" ]; then
+  log_info "RUNPOD_SERVERLESS=${RUNPOD_SERVERLESS}"
+fi
+
 first_arg="${1:-}"
 
 # Простейшая проверка truthy значений для RUNPOD_SERVERLESS
@@ -49,7 +59,8 @@ case "$first_arg" in
       log_info "RUNPOD_SERVERLESS=true — принудительно запускаю serverless"
       exec python -m rp_handler.serverless "$@"
     else
-      exec python -m rp_handler.main "$@"
+      log_warn "Неизвестный аргумент '$first_arg' — fallback к serverless"
+      exec python -m rp_handler.serverless "$@"
     fi
     ;;
 esac

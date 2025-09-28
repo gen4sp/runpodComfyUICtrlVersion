@@ -11,6 +11,8 @@
 
 ```bash
 ./scripts/build_docker.sh --tag runpod-comfy:local
+# или вручную, чтобы гарантированно подтянуть свежие файлы entrypoint:
+docker build --pull --no-cache -t runpod-comfy:local -f docker/Dockerfile .
 # Загрузите образ в свой реестр (GHCR/AR/ECR/Docker Hub), если требуется.
 ```
 
@@ -52,7 +54,7 @@
 
 Запуск образа в RunPod Serverless:
 
-1. Соберите и (при необходимости) загрузите образ в реестр:
+1. Соберите и (при необходимости) загрузите образ в реестр (используйте уникальный тег, чтобы RunPod не кешировал старый entrypoint):
 
 ```bash
 ./scripts/build_docker.sh --tag <registry>/<image>:<tag>
@@ -62,12 +64,14 @@
 2. В шаблоне Serverless укажите:
 
     - Image: `<registry>/<image>:<tag>`
-    - Command/Args: `serverless`
+    - Command можно оставить пустым; Args — пусто или `serverless` (по умолчанию entrypoint всё равно запустит serverless).
     - Env:
         - `OUTPUT_MODE=gcs` (или `base64`)
         - `GCS_BUCKET=<bucket>`
         - `GOOGLE_APPLICATION_CREDENTIALS=/opt/creds/sa.json` (и положите файл в образ/секрет)
         - опционально `GCS_PREFIX`, `GCS_PUBLIC`, `GCS_SIGNED_URL_TTL`
+
+    Примечание: если нужно запустить CLI-handler, передайте `cli` в Args.
 
 3. Отправка задания (пример тела запроса):
 
