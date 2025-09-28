@@ -55,8 +55,8 @@
 5. **Запуск handler (headless)**
 
     ```bash
-    python3 scripts/version.py run-handler demo \
-      --workflow workflows/example.json \
+    python3 scripts/version.py run-handler wan22-fast \
+      --workflow workflows/minimal.json \
       --output base64 --out-file result.b64
     ```
 

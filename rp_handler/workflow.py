@@ -59,13 +59,15 @@ class ComfyUIWorkflowRunner:
         if self.verbose:
             log_info(f"Starting ComfyUI: {' '.join(cmd)}")
         
+        stdout_target = None if self.verbose else subprocess.DEVNULL
+        stderr_target = None if self.verbose else subprocess.DEVNULL
+
         self.process = subprocess.Popen(
             cmd,
             cwd=str(self.comfy_home),
             env=env,
-            stdout=subprocess.PIPE if not self.verbose else None,
-            stderr=subprocess.PIPE if not self.verbose else None,
-            text=True
+            stdout=stdout_target,
+            stderr=stderr_target,
         )
         
         # Ждем запуска ComfyUI
