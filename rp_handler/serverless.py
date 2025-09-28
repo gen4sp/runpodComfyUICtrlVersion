@@ -23,6 +23,7 @@ from .resolver import (
     realize_from_resolved,
 )
 from .workflow import run_workflow
+from .utils import log_info, log_warn, log_error
 
 
 def _download_to_temp(url: str) -> str:
@@ -117,15 +118,23 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:  # runpod serverless handl
 
     version_id = payload.get("version_id") or os.environ.get("COMFY_VERSION_NAME")
     if not isinstance(version_id, str) or not version_id.strip():
+        log_warn("[serverless] version_id отсутствует в payload и окружении")
         return {"error": "version_id is required"}
+    version_id = version_id.strip()
+
+    request_id = event.get("requestId") if isinstance(event, dict) else None
+    log_info(f"[serverless] handler start (request_id={request_id}, version_id={version_id})")
 
     workflow_file: Optional[str] = None
     try:
         if "workflow_url" in payload and isinstance(payload["workflow_url"], str):
+            log_info("[serverless] загрузка workflow по URL")
             workflow_file = _download_to_temp(payload["workflow_url"])  # type: ignore[arg-type]
         elif "workflow" in payload:
+            log_info("[serverless] запись inline workflow во временный файл")
             workflow_file = _write_json_to_temp(payload["workflow"])
         else:
+            log_warn("[serverless] не передан workflow или workflow_url")
             return {"error": "workflow or workflow_url must be provided"}
 
         # Output options
@@ -138,16 +147,21 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:  # runpod serverless handl
         try:
             spec_path = spec_path_for_version(version_id)
         except ValueError as exc:
+            log_error(f"[serverless] некорректный version_id: {exc}")
             return {"error": str(exc)}
+        log_info(f"[serverless] используем spec: {spec_path}")
         if not spec_path.exists():
+            log_error(f"[serverless] spec не найден: {spec_path}")
             return {"error": f"Spec file not found for version '{version_id}': {spec_path}"}
 
         offline_env = str(os.environ.get("COMFY_OFFLINE", "")).strip().lower() in {"1", "true", "yes", "on"}
         try:
             resolved = resolve_version_spec(spec_path, offline=offline_env)
         except SpecValidationError as exc:
+            log_error(f"[serverless] ошибка валидации spec: {exc}")
             return {"error": str(exc)}
         except RuntimeError as exc:
+            log_error(f"[serverless] ошибка резолвинга spec: {exc}")
             return {"error": str(exc)}
 
         resolved_options = resolved.get("options") or {}
@@ -158,18 +172,29 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:  # runpod serverless handl
             "offline": offline_effective,
             "skip_models": skip_models_effective,
         }
+        log_info(
+            f"[serverless] resolved spec готов (offline={offline_effective}, skip_models={skip_models_effective})"
+        )
 
         save_resolved_lock(resolved)
+        log_info("[serverless] подготовка окружения ComfyUI")
         comfy_home_path, models_dir_path = realize_from_resolved(resolved, offline=offline_effective)
+        log_info(f"[serverless] COMFY_HOME={comfy_home_path}, MODELS_DIR={models_dir_path}")
 
         # models_dir override
         models_dir_effective = pathlib.Path(payload.get("models_dir")).resolve() if isinstance(payload.get("models_dir"), str) else models_dir_path
+        if models_dir_effective != models_dir_path:
+            log_info(f"[serverless] MODELS_DIR переопределён: {models_dir_effective}")
 
         # 2) Run workflow
         try:
+            log_info("[serverless] запуск workflow через ComfyUI")
             artifact_bytes = run_workflow(workflow_file, str(comfy_home_path), str(models_dir_effective), verbose)
         except RuntimeError as exc:
+            log_error(f"[serverless] выполнение workflow завершилось с ошибкой: {exc}")
             return {"error": str(exc)}
+
+        log_info(f"[serverless] workflow завершён, размер артефактов={len(artifact_bytes)} байт")
 
         # 3) Build output
         if output_mode == "base64":
@@ -199,6 +224,7 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:  # runpod serverless handl
         try:
             if workflow_file and os.path.exists(workflow_file):
                 os.remove(workflow_file)
+                log_info("[serverless] временный файл workflow удалён")
         except Exception:
             pass
 

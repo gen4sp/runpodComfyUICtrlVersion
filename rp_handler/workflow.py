@@ -35,7 +35,7 @@ class ComfyUIWorkflowRunner:
         for dir_path in dirs_to_create:
             dir_path.mkdir(parents=True, exist_ok=True)
             if self.verbose:
-                log_info(f"Created directory: {dir_path}")
+                log_info(f"[workflow] подготовлена директория: {dir_path}")
     
     def _start_comfyui(self) -> None:
         """Запустить ComfyUI в headless режиме."""
@@ -57,7 +57,7 @@ class ComfyUIWorkflowRunner:
         ]
         
         if self.verbose:
-            log_info(f"Starting ComfyUI: {' '.join(cmd)}")
+            log_info(f"[workflow] старт ComfyUI: {' '.join(cmd)}")
         
         stdout_target = None if self.verbose else subprocess.DEVNULL
         stderr_target = None if self.verbose else subprocess.DEVNULL
@@ -81,9 +81,11 @@ class ComfyUIWorkflowRunner:
                 with urllib.request.urlopen(f"{self.api_url}/system_stats", timeout=5) as response:
                     if response.status == 200:
                         if self.verbose:
-                            log_info("ComfyUI is ready")
+                            log_info("[workflow] ComfyUI готов к приёму запросов")
                         return
-            except (urllib.error.URLError, OSError):
+            except (urllib.error.URLError, urllib.error.HTTPError, OSError) as exc:
+                if self.verbose:
+                    log_info(f"[workflow] ComfyUI ещё не готов ({exc})")
                 pass
             time.sleep(1)
         
@@ -119,11 +121,18 @@ class ComfyUIWorkflowRunner:
                     if prompt_id in history:
                         status = history[prompt_id].get('status', {})
                         if status.get('status_str') == 'success':
+                            if self.verbose:
+                                log_info("[workflow] статус: success")
                             return status.get('outputs', [])
                         elif status.get('status_str') == 'error':
                             error_msg = status.get('status_message', 'Unknown error')
                             raise RuntimeError(f"Workflow failed: {error_msg}")
-            except (urllib.error.URLError, OSError, json.JSONDecodeError):
+                        else:
+                            if self.verbose:
+                                log_info(f"[workflow] статус: {status.get('status_str')} :: {status.get('status_message')}")
+            except (urllib.error.URLError, urllib.error.HTTPError, OSError, json.JSONDecodeError) as exc:
+                if self.verbose:
+                    log_info(f"[workflow] ожидание завершения: нет данных ({exc})")
                 pass
             time.sleep(2)
         
@@ -143,7 +152,7 @@ class ComfyUIWorkflowRunner:
                             if image_path.exists():
                                 artifacts.append(image_path.read_bytes())
                                 if self.verbose:
-                                    log_info(f"Collected artifact: {filename}")
+                                    log_info(f"[workflow] найден артефакт: {filename}")
         
         if not artifacts:
             log_warn("No artifacts found in workflow output")
@@ -159,6 +168,8 @@ class ComfyUIWorkflowRunner:
             self._prepare_directories()
             
             # 2. Запустить ComfyUI
+            if self.verbose:
+                log_info("[workflow] подготовка запуска ComfyUI")
             self._start_comfyui()
             
             # 3. Загрузить и отправить workflow
@@ -166,7 +177,7 @@ class ComfyUIWorkflowRunner:
             prompt_id = self._submit_workflow(workflow_data)
             
             if self.verbose:
-                log_info(f"Submitted workflow with prompt_id: {prompt_id}")
+                log_info(f"[workflow] workflow отправлен, prompt_id={prompt_id}")
             
             # 4. Дождаться завершения
             outputs = self._wait_for_completion(prompt_id)
@@ -174,6 +185,9 @@ class ComfyUIWorkflowRunner:
             # 5. Собрать артефакты
             artifacts = self._collect_artifacts(outputs)
             
+            if self.verbose:
+                log_info(f"[workflow] артефакты собраны: {len(artifacts)} байт")
+
             return artifacts
             
         finally:
@@ -186,7 +200,7 @@ class ComfyUIWorkflowRunner:
                     self.process.kill()
                     self.process.wait()
                 if self.verbose:
-                    log_info("ComfyUI process stopped")
+                    log_info("[workflow] процесс ComfyUI остановлен")
 
 
 def run_workflow(workflow_path: str, comfy_home: str, models_dir: str, verbose: bool = False) -> bytes:
