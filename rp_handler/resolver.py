@@ -221,21 +221,31 @@ def _git_ls_remote(repo: str, ref: Optional[str]) -> Optional[str]:
 
 
 def _pick_default_comfy_home(version_id: str) -> pathlib.Path:
-    env_home = os.environ.get("COMFY_HOME")
-    if env_home:
-        return pathlib.Path(env_home)
+    env_home_raw = os.environ.get("COMFY_HOME")
+    default_env_home = "/workspace/ComfyUI"
 
-    default_home = pathlib.Path("/workspace/ComfyUI")
+    if env_home_raw:
+        env_home = pathlib.Path(env_home_raw)
+        # Пользовательский COMFY_HOME имеет приоритет, кроме случая значения по умолчанию
+        if env_home_raw.strip() and env_home_raw.strip() != default_env_home:
+            return env_home
+
+    runpod_volume = pathlib.Path("/runpod-volume")
+    if runpod_volume.exists() and os.access(str(runpod_volume), os.W_OK | os.X_OK):
+        return (runpod_volume / f"comfy-{version_id}").resolve()
+
+    # Если runpod-volume недоступен, используем env-значение (даже дефолтное)
+    if env_home_raw:
+        return pathlib.Path(env_home_raw)
+
+    default_home = pathlib.Path(default_env_home)
     if default_home.parent.exists():
         return default_home
 
-    runpod_volume = pathlib.Path("/runpod-volume")
-    if runpod_volume.exists():
-        return runpod_volume / f"comfy-{version_id}"
-
     home = os.environ.get("HOME")
     if home:
-        return pathlib.Path(home) / f"comfy-{version_id}"
+        return pathlib.Path(home).expanduser() / f"comfy-{version_id}"
+
     return pathlib.Path.cwd() / f"comfy-{version_id}"
 
 
@@ -531,8 +541,10 @@ def realize_from_resolved(
     # Ensure custom_nodes directory exists in checkout (may be absent in repo for fresh clone)
     (repo_dir / "custom_nodes").mkdir(parents=True, exist_ok=True)
 
-    # Autoinstall ComfyUI requirements
-    py = _venv_python_from_env() or _select_python_executable()
+    # Autoinstall ComfyUI requirements (используем venv внутри COMFY_HOME, если возможно)
+    comfy_verbose = str(os.environ.get("COMFY_VERBOSE", "")).strip().lower() in {"1", "true", "yes", "on"}
+    ensured_py = _ensure_comfy_venv(comfy_home, verbose=comfy_verbose)
+    py = ensured_py or _venv_python_from_env() or _select_python_executable()
     req = repo_dir / "requirements.txt"
     if req.exists() and not offline:
         cmd = [py, "-m", "pip", "install"]
@@ -950,6 +962,45 @@ def _venv_python_path(venv_dir: pathlib.Path) -> pathlib.Path:
     return venv_dir / "bin" / "python"
 
 
+def _ensure_comfy_venv(comfy_home: pathlib.Path, *, verbose: bool = False) -> Optional[str]:
+    """Гарантирует наличие venv внутри COMFY_HOME и возвращает путь к python."""
+
+    try:
+        comfy_home.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        log_warn(f"Не удалось создать COMFY_HOME {comfy_home}: {exc}")
+        return None
+
+    if not os.access(str(comfy_home), os.W_OK | os.X_OK):
+        if verbose:
+            log_warn(f"Нет доступа на запись в {comfy_home}, пропускаю создание venv")
+        return None
+
+    venv_dir = comfy_home / ".venv"
+    python_path = _venv_python_path(venv_dir)
+
+    if python_path.exists() and os.access(str(python_path), os.X_OK):
+        return str(python_path)
+
+    base_python = _select_python_executable()
+    if verbose:
+        log_info(f"Создаю venv: {venv_dir} (python={base_python})")
+
+    try:
+        code, out, err = run_command([base_python, "-m", "venv", str(venv_dir)])
+    except Exception as exc:
+        log_warn(f"Исключение при создании venv в {venv_dir}: {exc}")
+        return None
+
+    if code != 0 or not python_path.exists():
+        log_warn(f"Не удалось создать venv в {venv_dir}: {err or out}")
+        return None
+
+    if verbose:
+        log_info(f"Venv готов: {python_path}")
+    return str(python_path)
+
+
 def _venv_python_from_env() -> Optional[str]:
     """Если задан COMFY_HOME и существует venv, вернуть путь к его python."""
     comfy_home = os.environ.get("COMFY_HOME")
@@ -983,27 +1034,9 @@ def _resolve_python_interpreter(lock: Dict[str, object], verbose: bool = False) 
     # 2) Из $COMFY_HOME/.venv
     comfy_home = os.environ.get("COMFY_HOME")
     if comfy_home:
-        venv_dir = pathlib.Path(comfy_home) / ".venv"
-        venv_python = _venv_python_path(venv_dir)
-        if venv_python.exists() and os.access(str(venv_python), os.X_OK):
-            if verbose:
-                log_info(f"Using Python interpreter from venv: {venv_python}")
-            return str(venv_python)
-        # Попробуем создать venv, если директории нет или нет python внутри
-        try:
-            base_py = _select_python_executable()
-            if verbose:
-                log_info(f"Creating venv at {venv_dir} using {base_py}")
-            venv_dir.parent.mkdir(parents=True, exist_ok=True)
-            code, out, err = run_command([base_py, "-m", "venv", str(venv_dir)])
-            if code == 0 and venv_python.exists():
-                if verbose:
-                    log_info(f"Venv created: {venv_python}")
-                return str(venv_python)
-            else:
-                log_warn(f"Failed to create venv at {venv_dir}: {err or out}")
-        except Exception as e:
-            log_warn(f"Exception while creating venv at {venv_dir}: {e}")
+        ensured_python = _ensure_comfy_venv(pathlib.Path(comfy_home), verbose=verbose)
+        if ensured_python:
+            return ensured_python
 
     # 3) Системный python
     sys_py = _select_python_executable()

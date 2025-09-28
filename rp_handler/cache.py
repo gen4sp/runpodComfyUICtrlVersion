@@ -30,11 +30,16 @@ _COMFY_CACHE_ENV = (
 
 
 def _default_cache_root() -> pathlib.Path:
-    xdg = os.environ.get("XDG_CACHE_HOME")
     base_name = "runpod-comfy"
+    runpod_volume = pathlib.Path("/runpod-volume")
+    if runpod_volume.exists() and os.access(str(runpod_volume), os.W_OK | os.X_OK):
+        return (runpod_volume / base_name).resolve()
+
+    xdg = os.environ.get("XDG_CACHE_HOME")
     if xdg:
         return pathlib.Path(xdg).expanduser().resolve() / base_name
-    return pathlib.Path.home() / ".cache" / base_name
+
+    return pathlib.Path.home().expanduser().resolve() / ".cache" / base_name
 
 
 @lru_cache(maxsize=1)
