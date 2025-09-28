@@ -547,7 +547,18 @@ def realize_from_resolved(
     signature = _signature_from_resolved(resolved)
     marker = _load_prepared_marker(comfy_home)
 
+    venv_python_path = _venv_python_path(comfy_home / ".venv")
+    locked_interpreter_path = pathlib.Path(locked_interpreter) if locked_interpreter else None
+
     should_prepare = marker != signature
+    if not should_prepare and not locked_interpreter_path:
+        if not venv_python_path.exists():
+            log_warn(
+                f"[resolver] маркер найден, но виртуальное окружение отсутствует ({venv_python_path}); переинициализирую"
+            )
+            should_prepare = True
+            marker = None
+
     if not should_prepare:
         log_info("[resolver] найден маркер подготовленного окружения, пропускаю повторную установку")
 
@@ -564,26 +575,23 @@ def realize_from_resolved(
         except RuntimeError as exc:
             raise RuntimeError(f"Не удалось подготовить ComfyUI в {repo_dir}: {exc}")
 
+    python_path = _venv_python_from_env()
+    if python_path:
+        ensure_venv = python_path
+    else:
+        ensure_venv = _ensure_comfy_venv(comfy_home, verbose=False)
+        python_path = ensure_venv or locked_interpreter or _select_python_executable()
+
     # Ensure custom_nodes directory exists in checkout (may be absent in repo for fresh clone)
     (repo_dir / "custom_nodes").mkdir(parents=True, exist_ok=True)
     if should_prepare:
-        log_info("[resolver] директория custom_nodes готова")
+        log_info(f"[resolver] директория custom_nodes готова")
 
-    # Autoinstall ComfyUI requirements (используем venv внутри COMFY_HOME, если возможно)
-    comfy_verbose = str(os.environ.get("COMFY_VERBOSE", "")).strip().lower() in {"1", "true", "yes", "on"}
-    ensured_py = _ensure_comfy_venv(comfy_home, verbose=comfy_verbose)
-    if ensured_py:
-        py = ensured_py
-    elif locked_interpreter:
-        py = locked_interpreter
-    else:
-        env_py = _venv_python_from_env()
-        py = env_py or _select_python_executable()
-    log_info(f"[resolver] выбран интерпретатор Python: {py}")
+    log_info(f"[resolver] выбран интерпретатор Python: {python_path}")
     req = repo_dir / "requirements.txt"
     if should_prepare and req.exists() and not offline:
         log_info(f"[resolver] устанавливаю зависимости из {req}")
-        cmd = [py, "-m", "pip", "install"]
+        cmd = [python_path, "-m", "pip", "install"]
         if wheels_dir:
             cmd.extend(["--no-index", "--find-links", str(wheels_dir)])
         cmd.extend(["-r", str(req)])
@@ -630,7 +638,7 @@ def realize_from_resolved(
 
     if should_prepare:
         _install_custom_node_dependencies(
-            python_exe=py,
+            python_exe=python_path,
             comfy_home=comfy_home,
             wheels_dir=wheels_dir,
             offline=offline,

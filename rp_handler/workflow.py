@@ -88,10 +88,16 @@ class ComfyUIWorkflowRunner:
         env = os.environ.copy()
         env["COMFY_HOME"] = str(self.comfy_home)
         env["MODELS_DIR"] = str(self.models_dir)
-        
-        # Запуск ComfyUI в headless режиме
+        python_path = env.get("COMFY_PYTHON")
+        if not python_path:
+            venv_path = self.comfy_home / ".venv" / "bin" / "python"
+            if venv_path.exists():
+                python_path = str(venv_path)
+            else:
+                python_path = "python"
+
         cmd = [
-            "python", str(main_script),
+            python_path, str(main_script),
             "--listen", "127.0.0.1",
             "--port", "8188",
             "--disable-auto-launch"
