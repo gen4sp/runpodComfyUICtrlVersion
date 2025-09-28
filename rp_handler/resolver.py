@@ -272,6 +272,7 @@ def _ensure_repo_cache(repo: str, *, offline: bool) -> pathlib.Path:
     cache_path = cache_root / _slug_from_repo(repo)
 
     if not (cache_path / ".git").exists():
+        log_info(f"[resolver] репозиторий {repo} отсутствует в кешe, клонирую в {cache_path}")
         if offline:
             raise RuntimeError(
                 f"Offline режим: отсутствует кеш репозитория {repo}, требуется предварительная синхронизация"
@@ -279,7 +280,9 @@ def _ensure_repo_cache(repo: str, *, offline: bool) -> pathlib.Path:
         code, out, err = run_command(["git", "clone", repo, str(cache_path)])
         if code != 0:
             raise RuntimeError(f"Не удалось клонировать репозиторий {repo}: {err or out}")
+        log_info(f"[resolver] репозиторий {repo} успешно клонирован в {cache_path}")
     elif not offline:
+        log_info(f"[resolver] обновляю кеш репозитория {repo} в {cache_path}")
         run_command(["git", "-C", str(cache_path), "fetch", "--all", "--tags", "-q"])
 
     return cache_path
@@ -297,6 +300,7 @@ def _checkout_from_cache(
 
     if not target_repo.exists():
         target_repo.parent.mkdir(parents=True, exist_ok=True)
+        log_info(f"[resolver] создаю рабочую копию из {cache_repo} в {target_repo}")
         clone_args = ["git", "clone", "--shared", str(cache_repo), str(target_repo)]
         code, out, err = run_command(clone_args)
         if code != 0:
@@ -311,17 +315,22 @@ def _checkout_from_cache(
                     f"Offline режим: коммит {commit} отсутствует в кешовом репозитории {cache_repo}"
                 )
             raise RuntimeError(f"Коммит {commit} отсутствует в кешовом репозитории {cache_repo}")
+        log_info(f"[resolver] commit {commit} найден в кеше {cache_repo}")
 
     # Обновить локальную копию из кеша (без обращения в сеть)
+    if commit:
+        log_info(f"[resolver] синхронизирую {target_repo} с кешем {cache_repo} и переключаюсь на {commit}")
         run_command(["git", "-C", str(target_repo), "remote", "set-url", "origin", str(cache_repo)])
         run_command(["git", "-C", str(target_repo), "fetch", "origin", "--tags", "-q"])
 
     checkout_target = commit or "HEAD"
+    log_info(f"[resolver] checkout --force {checkout_target} в {target_repo}")
     code, out, err = run_command(["git", "-C", str(target_repo), "checkout", "--force", checkout_target])
     if code != 0:
         raise RuntimeError(f"Не удалось переключиться на {checkout_target} в {target_repo}: {err or out}")
     run_command(["git", "-C", str(target_repo), "reset", "--hard", checkout_target])
     run_command(["git", "-C", str(target_repo), "clean", "-fdx"])
+    log_info(f"[resolver] рабочая копия {target_repo} готова к использованию")
 
 
 def _ensure_symlink(src: pathlib.Path, dst: pathlib.Path) -> None:
@@ -512,6 +521,7 @@ def realize_from_resolved(
 ) -> Tuple[pathlib.Path, pathlib.Path]:
     """Create/prepare COMFY_HOME based on resolved spec. Returns (comfy_home, models_dir)."""
     version_id = str(resolved.get("version_id") or "version")
+    log_info(f"[resolver] подготовка окружения для версии {version_id}")
     comfy_home = target_path or _pick_default_comfy_home(version_id)
     comfy_home = comfy_home.resolve()
     models_dir = (models_dir_override or _models_dir_default(comfy_home)).resolve()
@@ -519,6 +529,7 @@ def realize_from_resolved(
     # Ensure base dirs
     comfy_home.mkdir(parents=True, exist_ok=True)
     models_dir.mkdir(parents=True, exist_ok=True)
+    log_info(f"[resolver] пути: COMFY_HOME={comfy_home}, MODELS_DIR={models_dir}")
 
     # Clone or update ComfyUI
     comfy = resolved.get("comfy") or {}
@@ -527,6 +538,7 @@ def realize_from_resolved(
     if not isinstance(repo, str) or not repo:
         raise RuntimeError("Resolved comfy.repo is required")
     repo_dir = comfy_home
+    log_info(f"[resolver] готовлю ComfyUI из {repo} (commit={commit})")
     cache_repo = _ensure_repo_cache(repo, offline=offline)
     try:
         _checkout_from_cache(
@@ -540,13 +552,16 @@ def realize_from_resolved(
 
     # Ensure custom_nodes directory exists in checkout (may be absent in repo for fresh clone)
     (repo_dir / "custom_nodes").mkdir(parents=True, exist_ok=True)
+    log_info("[resolver] директория custom_nodes готова")
 
     # Autoinstall ComfyUI requirements (используем venv внутри COMFY_HOME, если возможно)
     comfy_verbose = str(os.environ.get("COMFY_VERBOSE", "")).strip().lower() in {"1", "true", "yes", "on"}
     ensured_py = _ensure_comfy_venv(comfy_home, verbose=comfy_verbose)
     py = ensured_py or _venv_python_from_env() or _select_python_executable()
+    log_info(f"[resolver] выбран интерпретатор Python: {py}")
     req = repo_dir / "requirements.txt"
     if req.exists() and not offline:
+        log_info(f"[resolver] устанавливаю зависимости из {req}")
         cmd = [py, "-m", "pip", "install"]
         if wheels_dir:
             cmd.extend(["--no-index", "--find-links", str(wheels_dir)])
@@ -554,6 +569,8 @@ def realize_from_resolved(
         code, out, err = run_command(cmd)
         if code != 0:
             log_warn(f"pip install ComfyUI requirements failed: {err or out}")
+        else:
+            log_info("[resolver] зависимости ComfyUI установлены")
 
     # Custom nodes: clone to cache and symlink
     cache_root = _nodes_cache_root()
@@ -576,6 +593,7 @@ def realize_from_resolved(
                         f"Offline режим: кэш для ноды {n_repo} не найден ({cache_path}), пропускаем"
                     )
                     continue
+                log_info(f"[resolver] клонирую кастом-ноду {n_repo} -> {cache_path}")
                 code, out, err = run_command(["git", "clone", n_repo, str(cache_path)])
                 if code != 0:
                     log_warn(f"Failed to clone node {n_name}: {err or out}")
@@ -587,6 +605,7 @@ def realize_from_resolved(
             # Symlink into COMFY_HOME
             dst = repo_dir / "custom_nodes" / n_name
             _ensure_symlink(cache_path, dst)
+            log_info(f"[resolver] кастом-нода {n_name} готова")
 
     _install_custom_node_dependencies(
         python_exe=py,
@@ -596,6 +615,7 @@ def realize_from_resolved(
     )
 
     # Models: сверяем с кешем и создаём симлинки
+    log_info("[resolver] подготовка моделей")
     _prepare_models(
         resolved_models=resolved.get("models") or [],
         models_dir=models_dir,
@@ -611,6 +631,7 @@ def realize_from_resolved(
         models_dir=models_dir,
         resolved_models=resolved.get("models"),
     )
+    log_info("[resolver] окружение ComfyUI готово")
     return comfy_home, models_dir
 
 
@@ -828,7 +849,7 @@ def validate_version_spec(raw_spec: object, source_path: pathlib.Path) -> Dict[s
         raise SpecValidationError(f"{source_path}: раздел 'comfy' обязателен и должен быть объектом")
     comfy_repo = comfy_raw.get("repo")
     if not isinstance(comfy_repo, str) or not comfy_repo.strip():
-        raise SpecValidationError(f"{source_path}: поле 'comfy.repo' обязательно и должно быть строкой")
+        raise SpecValidationError(f"{source_path}: поле 'comfy.repo' обязателен и должно быть строкой")
     comfy_ref = _optional_trimmed_str(comfy_raw.get("ref"), source_path, "comfy.ref")
     comfy_commit = _optional_trimmed_str(comfy_raw.get("commit"), source_path, "comfy.commit")
 
