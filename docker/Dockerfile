@@ -5,7 +5,7 @@ FROM python:3.11-slim AS runtime
 
 #anticashe
 ARG BUILD_REV2=<commit> # переменная для антикэша
-ENV BUILD_REV2=$BUILD_REV
+ENV BUILD_REV2=$BUILD_REV2
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -32,7 +32,7 @@ RUN apt-get update -y && \
 COPY scripts/ /app/scripts/
 COPY rp_handler/ /app/rp_handler/
 # Версии теперь передаются только через payload (version_id); каталог versions может быть смонтирован при необходимости
-# COPY versions/ /app/versions/
+COPY versions/ /app/versions/
 
 # Создаём директории для COMFY_HOME и моделей
 RUN mkdir -p "$COMFY_HOME" "$MODELS_DIR"
