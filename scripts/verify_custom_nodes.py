@@ -2,7 +2,7 @@
 """
 Скрипт для восстановления кастом-нод из lock-файлов.
 
-Читает resolved-lock (`~/.cache/runpod-comfy/resolved/<id>.lock.json`) и восстанавливает custom_nodes секцию.
+Читает resolved-lock (`/runpod-volume/cache/runpod-comfy/resolved/<id>.lock.json`) и восстанавливает custom_nodes секцию.
 """
 
 import argparse

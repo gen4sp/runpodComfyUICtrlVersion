@@ -36,7 +36,7 @@
     -   `env`: дополнительные переменные окружения (опционально)
     -   `options`: `{ offline?, skip_models? }`
 
--   Resolved-lock (`~/.cache/runpod-comfy/resolved/<id>.lock.json`) создаётся автоматически.
+-   Resolved-lock (`/runpod-volume/cache/runpod-comfy/resolved/<id>.lock.json`) создаётся автоматически.
 
 -   Handler:
     -   Принимает: путь/описание воркфлоу и `--version-id/--spec` (без lock-файла), параметры вывода.
@@ -89,7 +89,7 @@
 
 -   Детальный гид: см. `docs/runpod.md`.
 -   Дефолтные пути внутри образа: `COMFY_HOME=/workspace/ComfyUI`, `MODELS_DIR=/workspace/models` (переопределяйте переменными окружения при использовании volume).
--   Для Pods рекомендуется переопределять на volume: `/runpod-volume/comfy`.
+-   Для Pods рекомендуется переопределять на volume: `/runpod-volume/builds/comfy-<id>`.
     -   Точка входа: `docker/entrypoint.sh` → `python -m rp_handler.main`.
     -   Параметры handler: `--version-id|--spec`, `--workflow`, `--output {base64|gcs}` (по умолчанию `gcs`), `--gcs-bucket`, `--gcs-prefix`, `--models-dir`, `--verbose`.
 -   GCS переменные: `GCS_BUCKET`, `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`/`GCS_PROJECT`, `GCS_PREFIX`, `GCS_RETRIES`, `GCS_RETRY_BASE_SLEEP`, `GCS_PUBLIC`, `GCS_SIGNED_URL_TTL`, `GCS_VALIDATE`.

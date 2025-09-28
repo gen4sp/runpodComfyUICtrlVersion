@@ -35,7 +35,7 @@ python3 scripts/version.py create smoke \
 python3 scripts/version.py validate smoke
 ```
 
-Ожидаемое: вывод плана, создан файл кеша `~/.cache/runpod-comfy/resolved/smoke.lock.json`.
+Ожидаемое: вывод плана, создан файл кеша `/runpod-volume/cache/runpod-comfy/resolved/smoke.lock.json`.
 
 ### 4. Развёртывание и запуск UI
 

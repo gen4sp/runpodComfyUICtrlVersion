@@ -232,7 +232,8 @@ def _pick_default_comfy_home(version_id: str) -> pathlib.Path:
 
     runpod_volume = pathlib.Path("/runpod-volume")
     if runpod_volume.exists() and os.access(str(runpod_volume), os.W_OK | os.X_OK):
-        return (runpod_volume / f"comfy-{version_id}").resolve()
+        builds_root = runpod_volume / "builds"
+        return (builds_root / f"comfy-{version_id}").resolve()
 
     # Если runpod-volume недоступен, используем env-значение (даже дефолтное)
     if env_home_raw:

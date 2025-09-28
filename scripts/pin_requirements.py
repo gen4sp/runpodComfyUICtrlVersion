@@ -16,13 +16,13 @@ Usage examples:
 
   python3 scripts/pin_requirements.py \
     --requirements requirements.txt \
-    --lock ~/.cache/runpod-comfy/resolved/comfy-foo.lock.json --in-place
+    --lock /runpod-volume/cache/runpod-comfy/resolved/comfy-foo.lock.json --in-place
 
 Offline pinning using wheel artifacts:
   python3 scripts/pin_requirements.py \
     --requirements requirements.txt \
     --wheels-dir /path/to/wheels --offline \
-    --lock ~/.cache/runpod-comfy/resolved/comfy-foo.lock.json --in-place
+    --lock /runpod-volume/cache/runpod-comfy/resolved/comfy-foo.lock.json --in-place
 """
 
 from __future__ import annotations

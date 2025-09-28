@@ -19,12 +19,12 @@ docker build --pull --no-cache -t runpod-comfy:local -f docker/Dockerfile .
 Переменные окружения:
 
 -   `COMFY_HOME` (по умолчанию `/workspace/ComfyUI` внутри контейнера) — корень окружения версии.
--   `MODELS_DIR` (по умолчанию `$COMFY_HOME/models`) — каталог моделей; на Pod переопределите на `/runpod-volume/...`.
+-   `MODELS_DIR` (по умолчанию `$COMFY_HOME/models`) — каталог моделей; на Pod переопределите на `/runpod-volume/cache/models` или собственный путь внутри volume.
 -   `OUTPUT_MODE` — `gcs` (по умолчанию) или `base64`.
 -   GCS: `GCS_BUCKET` (обязателен для `gcs`), `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`/`GCS_PROJECT`,
     `GCS_PREFIX` (по умолчанию `comfy/outputs`), `GCS_RETRIES` (3), `GCS_RETRY_BASE_SLEEP` (0.5), `GCS_PUBLIC` (false), `GCS_SIGNED_URL_TTL` (0), `GCS_VALIDATE` (true).
 
-Примечание: режим Pods (volume) не рассматривается — образ предназначен для RunPod Serverless.
+Примечание: режим Pods (volume) предполагает, что `COMFY_HOME` указывает на `/runpod-volume/builds/comfy-<id>`, а кеши — на `/runpod-volume/cache/runpod-comfy`.
 
 ### Serverless
 
@@ -98,7 +98,7 @@ docker build --pull --no-cache -t runpod-comfy:local -f docker/Dockerfile .
 
 ### Совместимость путей и прав
 
--   Для Pods используйте `/runpod-volume` как базу для `COMFY_HOME` и моделей.
+-   Для Pods используйте `/runpod-volume` как базу: окружение размещайте в `/runpod-volume/builds/comfy-<id>`, кеш — в `/runpod-volume/cache/runpod-comfy`, модели — в `/runpod-volume/models` или другом каталоге.
 -   Внутри образа дефолты: `/workspace/ComfyUI` и `/workspace/models`. Их следует переопределять переменными окружения, если используется volume.
 -   Все скрипты и handler работают в non-interactive режиме; подходят для serverless.
 

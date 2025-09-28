@@ -12,7 +12,7 @@
 ### Основные сущности
 
 -   `versions/<id>.json` — описание версии (ядро, кастом-ноды, модели, опции).
--   `COMFY_HOME` — каталог развёрнутой версии (если переменная не задана, внутри образа используется `/workspace/ComfyUI`, локально — `~/comfy-<id>`).
+-   `COMFY_HOME` — каталог развёрнутой версии (если переменная не задана, внутри образа используется `/workspace/ComfyUI`, локально — `~/comfy-<id>`, на RunPod volume — `/runpod-volume/builds/comfy-<id>`).
 -   `MODELS_DIR` — каталог моделей. По умолчанию общий кеш `COMFY_CACHE_ROOT/models`.
 
 ### Шаги
@@ -34,7 +34,7 @@
     python3 scripts/version.py validate demo
     ```
 
-    Команда резолвит SHA, сохраняет `~/.cache/runpod-comfy/resolved/demo.lock.json` и печатает план.
+    Команда резолвит SHA, сохраняет `/runpod-volume/cache/runpod-comfy/resolved/demo.lock.json` и печатает план.
 
 3. **Развёртывание окружения**
 
@@ -42,7 +42,7 @@
     python3 scripts/version.py realize demo
     ```
 
-    Скрипт клонирует ComfyUI и кастом-ноды в кеш, создаёт симлинки моделей, устанавливает `requirements.txt`. Для Pod с volume задайте `COMFY_HOME=/runpod-volume/comfy-demo` или используйте `--target /runpod-volume/comfy-demo`.
+    Скрипт клонирует ComfyUI и кастом-ноды в кеш, создаёт симлинки моделей, устанавливает `requirements.txt`. Для Pod с volume задайте `COMFY_HOME=/runpod-volume/builds/comfy-demo` или используйте `--target /runpod-volume/builds/comfy-demo`.
 
 4. **Запуск UI**
 

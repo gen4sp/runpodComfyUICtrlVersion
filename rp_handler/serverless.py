@@ -179,7 +179,9 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:  # runpod serverless handl
         save_resolved_lock(resolved)
         log_info("[serverless] подготовка окружения ComfyUI")
         comfy_home_path, models_dir_path = realize_from_resolved(resolved, offline=offline_effective)
-        log_info(f"[serverless] COMFY_HOME={comfy_home_path}, MODELS_DIR={models_dir_path}")
+        cache_root = pathlib.Path(os.environ.get("COMFY_CACHE_ROOT", "")).resolve() if os.environ.get("COMFY_CACHE_ROOT") else None
+        cache_info = f", CACHE_ROOT={cache_root}" if cache_root else ""
+        log_info(f"[serverless] COMFY_HOME={comfy_home_path}, MODELS_DIR={models_dir_path}{cache_info}")
 
         # models_dir override
         models_dir_effective = pathlib.Path(payload.get("models_dir")).resolve() if isinstance(payload.get("models_dir"), str) else models_dir_path

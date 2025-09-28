@@ -21,7 +21,7 @@ Env:
 
 Примеры:
   COMFY_HOME="$HOME/comfy" scripts/init_comfyui.sh --install-torch auto
-  scripts/init_comfyui.sh --path /runpod-volume/comfy --install-torch skip
+  scripts/init_comfyui.sh --path /runpod-volume/builds/comfy --install-torch skip
 EOF
 }
 

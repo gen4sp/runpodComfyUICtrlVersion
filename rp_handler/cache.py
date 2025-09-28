@@ -33,7 +33,11 @@ def _default_cache_root() -> pathlib.Path:
     base_name = "runpod-comfy"
     runpod_volume = pathlib.Path("/runpod-volume")
     if runpod_volume.exists() and os.access(str(runpod_volume), os.W_OK | os.X_OK):
-        return (runpod_volume / base_name).resolve()
+        return (runpod_volume / "cache" / base_name).resolve()
+
+    workspace_dir = pathlib.Path("/workspace")
+    if workspace_dir.exists() and os.access(str(workspace_dir), os.W_OK | os.X_OK):
+        return (workspace_dir / "cache" / base_name).resolve()
 
     xdg = os.environ.get("XDG_CACHE_HOME")
     if xdg:
