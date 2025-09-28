@@ -532,6 +532,22 @@ def realize_from_resolved(
     models_dir.mkdir(parents=True, exist_ok=True)
     log_info(f"[resolver] пути: COMFY_HOME={comfy_home}, MODELS_DIR={models_dir}")
  
+    ready_python = _venv_python_path(comfy_home / ".venv")
+    has_python = ready_python.exists() and os.access(str(ready_python), os.X_OK)
+    has_comfy_checkout = (comfy_home / "main.py").exists()
+
+    if has_python and has_comfy_checkout:
+        log_info("[resolver] обнаружен готовый build, пропускаю подготовку и установки")
+        os.environ["COMFY_HOME"] = str(comfy_home)
+        os.environ["MODELS_DIR"] = str(models_dir)
+        _write_extra_model_paths(
+            comfy_home=comfy_home,
+            models_dir=models_dir,
+            resolved_models=resolved.get("models"),
+        )
+        log_info("[resolver] окружение ComfyUI готово (использую существующий build)")
+        return comfy_home, models_dir
+
     # Clone or update ComfyUI
     comfy = resolved.get("comfy") or {}
     repo = comfy.get("repo") if isinstance(comfy, dict) else None
