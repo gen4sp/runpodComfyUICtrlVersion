@@ -46,8 +46,11 @@ case "$first_arg" in
     if [ $# -gt 0 ]; then
       shift
     fi
+    if [ $# -gt 0 ]; then
+      log_warn "Игнорирую дополнительные аргументы для serverless: $*"
+    fi
     log_info "Starting serverless adapter"
-    exec python -m rp_handler.serverless "$@"
+    exec python -m rp_handler.serverless
     ;;
   cli)
     shift || true
@@ -57,10 +60,10 @@ case "$first_arg" in
   *)
     if [ "$force_serverless" = "1" ]; then
       log_info "RUNPOD_SERVERLESS=true — принудительно запускаю serverless"
-      exec python -m rp_handler.serverless "$@"
+      exec python -m rp_handler.serverless
     else
       log_warn "Неизвестный аргумент '$first_arg' — fallback к serverless"
-      exec python -m rp_handler.serverless "$@"
+      exec python -m rp_handler.serverless
     fi
     ;;
 esac
