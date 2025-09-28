@@ -530,7 +530,7 @@ def realize_from_resolved(
     comfy_home.mkdir(parents=True, exist_ok=True)
     models_dir.mkdir(parents=True, exist_ok=True)
     log_info(f"[resolver] пути: COMFY_HOME={comfy_home}, MODELS_DIR={models_dir}")
-
+ 
     # Clone or update ComfyUI
     comfy = resolved.get("comfy") or {}
     repo = comfy.get("repo") if isinstance(comfy, dict) else None
@@ -538,21 +538,31 @@ def realize_from_resolved(
     if not isinstance(repo, str) or not repo:
         raise RuntimeError("Resolved comfy.repo is required")
     repo_dir = comfy_home
-    log_info(f"[resolver] готовлю ComfyUI из {repo} (commit={commit})")
-    cache_repo = _ensure_repo_cache(repo, offline=offline)
-    try:
-        _checkout_from_cache(
-            cache_repo=cache_repo,
-            target_repo=repo_dir,
-            commit=commit,
-            offline=offline,
-        )
-    except RuntimeError as exc:
-        raise RuntimeError(f"Не удалось подготовить ComfyUI в {repo_dir}: {exc}")
+ 
+    signature = _signature_from_resolved(resolved)
+    marker = _load_prepared_marker(comfy_home)
+ 
+    should_prepare = marker != signature
+    if not should_prepare:
+        log_info("[resolver] найден маркер подготовленного окружения, пропускаю повторную установку")
+ 
+    if should_prepare:
+        log_info(f"[resolver] готовлю ComfyUI из {repo} (commit={commit})")
+        cache_repo = _ensure_repo_cache(repo, offline=offline)
+        try:
+            _checkout_from_cache(
+                cache_repo=cache_repo,
+                target_repo=repo_dir,
+                commit=commit,
+                offline=offline,
+            )
+        except RuntimeError as exc:
+            raise RuntimeError(f"Не удалось подготовить ComfyUI в {repo_dir}: {exc}")
 
     # Ensure custom_nodes directory exists in checkout (may be absent in repo for fresh clone)
     (repo_dir / "custom_nodes").mkdir(parents=True, exist_ok=True)
-    log_info("[resolver] директория custom_nodes готова")
+    if should_prepare:
+        log_info("[resolver] директория custom_nodes готова")
 
     # Autoinstall ComfyUI requirements (используем venv внутри COMFY_HOME, если возможно)
     comfy_verbose = str(os.environ.get("COMFY_VERBOSE", "")).strip().lower() in {"1", "true", "yes", "on"}
@@ -560,7 +570,7 @@ def realize_from_resolved(
     py = ensured_py or _venv_python_from_env() or _select_python_executable()
     log_info(f"[resolver] выбран интерпретатор Python: {py}")
     req = repo_dir / "requirements.txt"
-    if req.exists() and not offline:
+    if should_prepare and req.exists() and not offline:
         log_info(f"[resolver] устанавливаю зависимости из {req}")
         cmd = [py, "-m", "pip", "install"]
         if wheels_dir:
@@ -587,41 +597,46 @@ def realize_from_resolved(
                 continue
             cache_name = f"{_slug_from_repo(n_repo)}@{n_commit or 'latest'}"
             cache_path = cache_root / cache_name
-            if not (cache_path / ".git").exists():
-                if offline:
-                    log_warn(
-                        f"Offline режим: кэш для ноды {n_repo} не найден ({cache_path}), пропускаем"
-                    )
-                    continue
-                log_info(f"[resolver] клонирую кастом-ноду {n_repo} -> {cache_path}")
-                code, out, err = run_command(["git", "clone", n_repo, str(cache_path)])
-                if code != 0:
-                    log_warn(f"Failed to clone node {n_name}: {err or out}")
-                    continue
-            if n_commit:
-                if not offline:
-                    run_command(["git", "-C", str(cache_path), "fetch", "--all", "--tags", "-q"])  # best-effort
-                run_command(["git", "-C", str(cache_path), "checkout", n_commit])
-            # Symlink into COMFY_HOME
+            if should_prepare:
+                if not (cache_path / ".git").exists():
+                    if offline:
+                        log_warn(
+                            f"Offline режим: кэш для ноды {n_repo} не найден ({cache_path}), пропускаем"
+                        )
+                        continue
+                    log_info(f"[resolver] клонирую кастом-ноду {n_repo} -> {cache_path}")
+                    code, out, err = run_command(["git", "clone", n_repo, str(cache_path)])
+                    if code != 0:
+                        log_warn(f"Failed to clone node {n_name}: {err or out}")
+                        continue
+                if n_commit:
+                    if not offline:
+                        run_command(["git", "-C", str(cache_path), "fetch", "--all", "--tags", "-q"])  # best-effort
+                    run_command(["git", "-C", str(cache_path), "checkout", n_commit])
+                log_info(f"[resolver] кастом-нода {n_name} готова")
             dst = repo_dir / "custom_nodes" / n_name
             _ensure_symlink(cache_path, dst)
-            log_info(f"[resolver] кастом-нода {n_name} готова")
 
-    _install_custom_node_dependencies(
-        python_exe=py,
-        comfy_home=comfy_home,
-        wheels_dir=wheels_dir,
-        offline=offline,
-    )
+    if should_prepare:
+        _install_custom_node_dependencies(
+            python_exe=py,
+            comfy_home=comfy_home,
+            wheels_dir=wheels_dir,
+            offline=offline,
+        )
 
-    # Models: сверяем с кешем и создаём симлинки
-    log_info("[resolver] подготовка моделей")
-    _prepare_models(
-        resolved_models=resolved.get("models") or [],
-        models_dir=models_dir,
-        comfy_home=comfy_home,
-        offline=offline,
-    )
+        log_info("[resolver] подготовка моделей")
+        _prepare_models(
+            resolved_models=resolved.get("models") or [],
+            models_dir=models_dir,
+            comfy_home=comfy_home,
+            offline=offline,
+        )
+
+        _save_prepared_marker(comfy_home, signature)
+        log_info("[resolver] окружение ComfyUI подготовлено и промаркеровано")
+    else:
+        log_info("[resolver] пропускаю подготовку, окружение уже готово")
 
     # Export env
     os.environ["COMFY_HOME"] = str(comfy_home)
@@ -1110,6 +1125,61 @@ def _find_existing_model(
         return candidate
 
     return None
+
+
+PREPARED_MARKER_FILENAME = ".runpod_prepared.json"
+
+
+def _prepared_marker_path(comfy_home: pathlib.Path) -> pathlib.Path:
+    return pathlib.Path(comfy_home) / PREPARED_MARKER_FILENAME
+
+
+def _load_prepared_marker(comfy_home: pathlib.Path) -> Optional[Dict[str, object]]:
+    path = _prepared_marker_path(comfy_home)
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        log_warn(f"Не удалось прочитать маркер подготовленного окружения {path}: {exc}")
+        return None
+
+
+def _save_prepared_marker(comfy_home: pathlib.Path, signature: Dict[str, object]) -> None:
+    path = _prepared_marker_path(comfy_home)
+    try:
+        path.write_text(json.dumps(signature, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    except Exception as exc:
+        log_warn(f"Не удалось записать маркер подготовленного окружения {path}: {exc}")
+
+
+def _signature_from_resolved(resolved: Dict[str, object]) -> Dict[str, object]:
+    comfy = resolved.get("comfy") if isinstance(resolved, dict) else {}
+    comfy_repo = ""
+    comfy_commit = ""
+    if isinstance(comfy, dict):
+        comfy_repo = str(comfy.get("repo") or "")
+        comfy_commit = str(comfy.get("commit") or "")
+
+    custom_nodes_raw = resolved.get("custom_nodes") if isinstance(resolved, dict) else []
+    custom_nodes: List[Dict[str, str]] = []
+    if isinstance(custom_nodes_raw, list):
+        for entry in custom_nodes_raw:
+            if not isinstance(entry, dict):
+                continue
+            custom_nodes.append(
+                {
+                    "repo": str(entry.get("repo") or ""),
+                    "commit": str(entry.get("commit") or ""),
+                }
+            )
+    custom_nodes.sort(key=lambda x: (x.get("repo", ""), x.get("commit", "")))
+
+    return {
+        "version_id": str(resolved.get("version_id") or ""),
+        "comfy": {"repo": comfy_repo, "commit": comfy_commit},
+        "custom_nodes": custom_nodes,
+    }
 
 
 
