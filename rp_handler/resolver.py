@@ -403,6 +403,145 @@ def _install_custom_node_dependencies(
             )
 
 
+def _parse_requirement_name(raw_line: str) -> Optional[str]:
+    line = raw_line.split("#", 1)[0].strip()
+    if not line or line.startswith(("-", "#")):
+        return None
+
+    if line.startswith(("http://", "https://", "git+", "file:", "svn+", "hg+", "bzr+", "ssh:")):
+        return None
+
+    if ";" in line:
+        line = line.split(";", 1)[0].strip()
+
+    for separator in ("==", "~=", ">=", "<=", "!=", ">", "<", "="):
+        if separator in line:
+            line = line.split(separator, 1)[0].strip()
+            break
+
+    if "[" in line:
+        line = line.split("[", 1)[0].strip()
+
+    normalized = line.replace("-", "_")
+    if normalized:
+        return normalized
+    return None
+
+
+def _collect_custom_node_requirements(comfy_home: pathlib.Path) -> Dict[str, List[str]]:
+    requirements: Dict[str, List[str]] = {}
+    custom_nodes_dir = comfy_home / "custom_nodes"
+
+    try:
+        entries = sorted(custom_nodes_dir.iterdir())
+    except FileNotFoundError:
+        return requirements
+    except OSError as exc:
+        log_warn(f"Не удалось прочитать custom_nodes: {exc}")
+        return requirements
+
+    for node_dir in entries:
+        try:
+            if not node_dir.is_dir():
+                continue
+        except OSError:
+            continue
+
+        req_file = node_dir / "requirements.txt"
+        if not req_file.exists():
+            continue
+
+        try:
+            lines = req_file.read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            log_warn(f"Не удалось прочитать {req_file}: {exc}")
+            continue
+
+        parsed: List[str] = []
+        for raw in lines:
+            name = _parse_requirement_name(raw)
+            if name:
+                parsed.append(name)
+
+        if parsed:
+            requirements[node_dir.name] = parsed
+
+    return requirements
+
+
+def _verify_custom_node_requirements(
+    *,
+    python_exe: Optional[str],
+    comfy_home: pathlib.Path,
+    verbose: bool,
+) -> None:
+    if not python_exe:
+        python_exe = _select_python_executable()
+
+    mapping = _collect_custom_node_requirements(comfy_home)
+    if not mapping:
+        if verbose:
+            log_info("[resolver] requirements.txt для кастом-нод не найдены — проверка пропущена")
+        return
+
+    all_packages: List[str] = []
+    for names in mapping.values():
+        all_packages.extend(names)
+
+    if not all_packages:
+        if verbose:
+            log_info("[resolver] кастом-ноды не содержат зависимостей для проверки")
+        return
+
+    unique_packages = sorted({name for name in all_packages})
+
+    script = (
+        "import json, sys\n"
+        "from importlib import metadata\n"
+        "packages = json.loads(sys.argv[1])\n"
+        "missing = []\n"
+        "for pkg in packages:\n"
+        "    try:\n"
+        "        metadata.distribution(pkg)\n"
+        "    except metadata.PackageNotFoundError:\n"
+        "        missing.append(pkg)\n"
+        "print(json.dumps(missing))\n"
+    )
+
+    code, out, err = run_command([python_exe, "-c", script, json.dumps(unique_packages)])
+    if code != 0:
+        log_warn(f"Не удалось проверить зависимости кастом-нод (python={python_exe}): {err or out}")
+        return
+
+    try:
+        missing_list = json.loads(out.strip() or "[]")
+    except json.JSONDecodeError as exc:
+        log_warn(f"Ошибка парсинга результатов проверки зависимостей: {exc}; вывод={out}")
+        return
+
+    missing_set = {str(item) for item in missing_list if item}
+    if not missing_set:
+        if verbose:
+            log_info("[resolver] зависимости кастом-нод установлены")
+        return
+
+    affected: Dict[str, List[str]] = {}
+    for node_name, names in mapping.items():
+        missing_for_node = [name for name in names if name in missing_set]
+        if missing_for_node:
+            affected[node_name] = missing_for_node
+
+    for node_name, names in affected.items():
+        log_error(
+            f"Недостающие зависимости для кастом-ноды {node_name}: {', '.join(sorted(set(names)))}"
+        )
+
+    raise RuntimeError(
+        "Не установлены Python-зависимости для кастом-нод: "
+        + ", ".join(sorted(missing_set))
+    )
+
+
 def resolve_version_spec(spec_path: pathlib.Path, offline: bool = False) -> Dict[str, object]:
     """Load versions/<id>.json, resolve missing commits, and return resolved dict.
 
@@ -682,6 +821,16 @@ def realize_from_resolved(
         models_dir=models_dir,
         resolved_models=resolved.get("models"),
     )
+
+    try:
+        _verify_custom_node_requirements(
+            python_exe=python_path,
+            comfy_home=comfy_home,
+            verbose=should_prepare,
+        )
+    except RuntimeError as exc:
+        raise RuntimeError(str(exc))
+
     log_info("[resolver] окружение ComfyUI готово")
     return comfy_home, models_dir
 

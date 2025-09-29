@@ -16,17 +16,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Системные зависимости, необходимые для сборки некоторых пакетов и работы ComfyUI
-# (git для клона узлов/репо, curl/ca-certificates, gcc и базовые dev headers при необходимости)
-RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends \
-      git \
-      curl \
-      ca-certificates \
-      build-essential \
-      libgl1 \
-      libglib2.0-0 && \
-    rm -rf /var/lib/apt/lists/*
+# RUN apt-get update -y && \
+#     apt-get install -y --no-install-recommends \
+#       git \
+#       curl \
+#       ca-certificates \
+#       build-essential \
+#       libgl1 \
+#       libglib2.0-0 && \
+#     rm -rf /var/lib/apt/lists/*
 
 # Копируем скрипты и handler внутрь образа
 COPY scripts/ /app/scripts/
@@ -37,13 +35,11 @@ COPY versions/ /app/versions/
 # Создаём директории для COMFY_HOME и моделей
 RUN mkdir -p "$COMFY_HOME" "$MODELS_DIR"
 
-# Устанавливаем зависимости handler (минимальные, без торча).
-# При необходимости торч ставится самим resolver в зависимости от lock/окружения.
-RUN python -m pip install --upgrade pip setuptools wheel && \
-    python -m pip install \
-      pyyaml \
-      google-cloud-storage \
-      runpod || true
+# RUN python -m pip install --upgrade pip setuptools wheel && \
+#     python -m pip install \
+#       pyyaml \
+#       google-cloud-storage \
+#       runpod || true
 
 # Добавляем entrypoint
 COPY docker/entrypoint.sh /entrypoint.sh
