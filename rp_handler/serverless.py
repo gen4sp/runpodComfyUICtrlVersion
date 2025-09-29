@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import base64
-import io
 import json
 import os
 import pathlib
@@ -15,13 +14,6 @@ try:
 except Exception as exc:  # pragma: no cover
     raise RuntimeError("runpod package is required for serverless adapter. Install 'runpod'.") from exc
 
-from .main import spec_path_for_version
-from .resolver import (
-    SpecValidationError,
-    resolve_version_spec,
-    save_resolved_lock,
-    realize_from_resolved,
-)
 from .workflow import run_workflow
 from .utils import log_info, log_warn, log_error
 
@@ -110,6 +102,26 @@ def _bool(val: Any, default: bool = False) -> bool:
     return str(val).strip().lower() in {"1", "true", "yes", "on"}
 
 
+_DEFAULT_BUILDS_ROOT = "/runpod-volume/builds"
+
+
+def _builds_root() -> pathlib.Path:
+    raw = os.environ.get("COMFY_BUILDS_ROOT", _DEFAULT_BUILDS_ROOT)
+    return pathlib.Path(raw).expanduser()
+
+
+def _prebuilt_comfy_home(version_id: str) -> pathlib.Path:
+    return _builds_root() / f"comfy-{version_id}"
+
+
+def _ensure_models_dir(path: pathlib.Path) -> pathlib.Path:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        log_warn(f"[serverless] не удалось создать MODELS_DIR {path}: {exc}")
+    return path
+
+
 def handler(event: Dict[str, Any]) -> Dict[str, Any]:  # runpod serverless handler
     # Поддерживаем как event["input"], так и event напрямую
     payload: Dict[str, Any] = event.get("input") if isinstance(event, dict) else None  # type: ignore
@@ -143,50 +155,60 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:  # runpod serverless handl
         gcs_prefix = payload.get("gcs_prefix") or os.environ.get("GCS_PREFIX", "comfy/outputs")
         verbose = _bool(payload.get("verbose"), False)
 
-        # 1) Resolve + realize version
-        try:
-            spec_path = spec_path_for_version(version_id)
-        except ValueError as exc:
-            log_error(f"[serverless] некорректный version_id: {exc}")
-            return {"error": str(exc)}
-        log_info(f"[serverless] используем spec: {spec_path}")
-        if not spec_path.exists():
-            log_error(f"[serverless] spec не найден: {spec_path}")
-            return {"error": f"Spec file not found for version '{version_id}': {spec_path}"}
+        # 1) Используем заранее подготовленное окружение из builds
+        builds_root_path = _builds_root()
+        if not builds_root_path.exists():
+            error = f"Каталог prebuilt окружений не найден: {builds_root_path}"
+            log_error(f"[serverless] {error}")
+            return {"error": error}
 
-        offline_env = str(os.environ.get("COMFY_OFFLINE", "")).strip().lower() in {"1", "true", "yes", "on"}
-        try:
-            resolved = resolve_version_spec(spec_path, offline=offline_env)
-        except SpecValidationError as exc:
-            log_error(f"[serverless] ошибка валидации spec: {exc}")
-            return {"error": str(exc)}
-        except RuntimeError as exc:
-            log_error(f"[serverless] ошибка резолвинга spec: {exc}")
-            return {"error": str(exc)}
+        comfy_home_path = _prebuilt_comfy_home(version_id)
+        log_info(f"[serverless] ищу prebuilt окружение: {comfy_home_path}")
 
-        resolved_options = resolved.get("options") or {}
-        offline_effective = bool(resolved_options.get("offline") or offline_env)
-        skip_models_effective = bool(resolved_options.get("skip_models"))
-        resolved["options"] = {
-            **resolved_options,
-            "offline": offline_effective,
-            "skip_models": skip_models_effective,
-        }
-        log_info(
-            f"[serverless] resolved spec готов (offline={offline_effective}, skip_models={skip_models_effective})"
-        )
+        if not comfy_home_path.exists():
+            error = f"Prebuilt окружение для версии '{version_id}' не найдено: {comfy_home_path}"
+            log_error(f"[serverless] {error}")
+            return {"error": error}
 
-        save_resolved_lock(resolved)
-        log_info("[serverless] подготовка окружения ComfyUI")
-        comfy_home_path, models_dir_path = realize_from_resolved(resolved, offline=offline_effective)
-        cache_root = pathlib.Path(os.environ.get("COMFY_CACHE_ROOT", "")).resolve() if os.environ.get("COMFY_CACHE_ROOT") else None
+        main_py = comfy_home_path / "main.py"
+        if not main_py.exists():
+            error = f"ComfyUI main.py не найден в {main_py}"
+            log_error(f"[serverless] {error}")
+            return {"error": error}
+
+        models_override_raw = payload.get("models_dir")
+        if isinstance(models_override_raw, str) and models_override_raw.strip():
+            models_dir_effective = pathlib.Path(models_override_raw).expanduser().resolve(strict=False)
+            log_info(f"[serverless] MODELS_DIR переопределён из payload: {models_dir_effective}")
+        else:
+            env_models = os.environ.get("MODELS_DIR")
+            if env_models:
+                default_models = pathlib.Path(env_models).expanduser().resolve(strict=False)
+            else:
+                default_models = (comfy_home_path.parent / "models").resolve(strict=False)
+            models_dir_effective = default_models
+
+        models_dir_effective = _ensure_models_dir(models_dir_effective)
+
+        cache_root = pathlib.Path(os.environ.get("COMFY_CACHE_ROOT", "")).expanduser() if os.environ.get("COMFY_CACHE_ROOT") else None
         cache_info = f", CACHE_ROOT={cache_root}" if cache_root else ""
-        log_info(f"[serverless] COMFY_HOME={comfy_home_path}, MODELS_DIR={models_dir_path}{cache_info}")
 
-        # models_dir override
-        models_dir_effective = pathlib.Path(payload.get("models_dir")).resolve() if isinstance(payload.get("models_dir"), str) else models_dir_path
-        if models_dir_effective != models_dir_path:
-            log_info(f"[serverless] MODELS_DIR переопределён: {models_dir_effective}")
+        # Прокидываем переменные окружения для дочернего процесса
+        os.environ["COMFY_HOME"] = str(comfy_home_path)
+        os.environ["MODELS_DIR"] = str(models_dir_effective)
+
+        if "COMFY_PYTHON" not in os.environ:
+            venv_python = comfy_home_path / ".venv" / "bin" / "python"
+            if venv_python.exists() and os.access(venv_python, os.X_OK):
+                os.environ["COMFY_PYTHON"] = str(venv_python)
+            else:
+                log_warn(
+                    f"[serverless] COMFY_PYTHON не задан и {venv_python} не найден или неисполняем; будет использован системный python"
+                )
+
+        log_info(
+            f"[serverless] готово prebuilt окружение: COMFY_HOME={comfy_home_path}, MODELS_DIR={models_dir_effective}{cache_info}"
+        )
 
         # 2) Run workflow
         try:

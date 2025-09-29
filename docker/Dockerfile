@@ -3,9 +3,6 @@
 # Мультиархитектурный базовый образ Python 3.11 slim
 FROM python:3.11-slim AS runtime
 
-#anticashe
-ARG BUILD_REV2=<commit> # переменная для антикэша
-ENV BUILD_REV2=$BUILD_REV2
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
