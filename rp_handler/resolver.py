@@ -532,14 +532,48 @@ def _verify_custom_node_requirements(
             affected[node_name] = missing_for_node
 
     for node_name, names in affected.items():
-        log_error(
+        log_warn(
             f"Недостающие зависимости для кастом-ноды {node_name}: {', '.join(sorted(set(names)))}"
         )
 
-    raise RuntimeError(
-        "Не установлены Python-зависимости для кастом-нод: "
-        + ", ".join(sorted(missing_set))
-    )
+    # Попытка установить недостающие пакеты напрямую
+    log_info(f"[resolver] попытка установить недостающие зависимости: {', '.join(sorted(missing_set))}")
+    cmd = [python_exe, "-m", "pip", "install"] + sorted(missing_set)
+    code, out, err = run_command(cmd)
+    
+    if code != 0:
+        log_warn(f"pip install недостающих зависимостей завершился с кодом {code}: {err or out}")
+    
+    # Повторная проверка после попытки установки
+    code, out, err = run_command([python_exe, "-c", script, json.dumps(unique_packages)])
+    if code != 0:
+        log_warn(f"Не удалось повторно проверить зависимости после установки: {err or out}")
+        raise RuntimeError(
+            "Не установлены Python-зависимости для кастом-нод: "
+            + ", ".join(sorted(missing_set))
+        )
+    
+    try:
+        still_missing = json.loads(out.strip() or "[]")
+    except json.JSONDecodeError as exc:
+        log_warn(f"Ошибка парсинга результатов повторной проверки: {exc}; вывод={out}")
+        raise RuntimeError(
+            "Не установлены Python-зависимости для кастом-нод: "
+            + ", ".join(sorted(missing_set))
+        )
+    
+    still_missing_set = {str(item) for item in still_missing if item}
+    if still_missing_set:
+        log_error(
+            "После попытки установки все еще недостают зависимости: "
+            + ", ".join(sorted(still_missing_set))
+        )
+        raise RuntimeError(
+            "Не установлены Python-зависимости для кастом-нод: "
+            + ", ".join(sorted(still_missing_set))
+        )
+    
+    log_info("[resolver] недостающие зависимости успешно установлены")
 
 
 def resolve_version_spec(spec_path: pathlib.Path, offline: bool = False) -> Dict[str, object]:
