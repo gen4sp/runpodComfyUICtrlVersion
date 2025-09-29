@@ -1,8 +1,7 @@
 # syntax=docker/dockerfile:1
 
-# Мультиархитектурный базовый образ Python 3.11 slim
-FROM python:3.11-slim AS runtime
-
+# Используем тот же базовый образ что и в Pod для совместимости окружений
+FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -13,15 +12,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends \
-      git \
-      curl \
-      ca-certificates \
-      build-essential \
-      libgl1 \
-      libglib2.0-0 && \
-    rm -rf /var/lib/apt/lists/*
+# Базовый образ runpod/pytorch уже содержит git, curl, build-essential, libgl1, libglib2.0-0
+# Дополнительных системных пакетов не требуется
 
 # Копируем скрипты и handler внутрь образа
 COPY scripts/ /app/scripts/
