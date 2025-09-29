@@ -16,6 +16,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import shutil
 from typing import List
 
 
@@ -38,6 +39,13 @@ def _run(cmd: List[str], *, cwd: pathlib.Path | None = None) -> None:
         subprocess.run(cmd, cwd=str(cwd) if cwd else None, check=True)
     except subprocess.CalledProcessError as exc:
         raise SystemExit(exc.returncode) from exc
+    except FileNotFoundError as exc:
+        raise SystemExit(f"[ERROR] Не найден исполняемый файл '{cmd[0]}': {exc}") from exc
+
+
+def _require_executable(name: str) -> None:
+    if shutil.which(name) is None:
+        raise SystemExit(f"[ERROR] Не найден исполняемый файл '{name}'. Установите Docker или добавьте его в PATH")
 
 
 def _resolve_path(base: pathlib.Path, value: str) -> pathlib.Path:
@@ -144,6 +152,8 @@ def main(argv: list[str] | None = None) -> int:
     repo_root = pathlib.Path(__file__).resolve().parent
     context_path = _resolve_path(repo_root, args.context)
     dockerfile_path = _resolve_path(context_path, args.dockerfile)
+
+    _require_executable("docker")
 
     _print_info(f"Сборка образа {args.image}")
     build_image(args, context_path, dockerfile_path)
