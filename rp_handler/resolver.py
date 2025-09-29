@@ -1183,7 +1183,11 @@ def _venv_python_path(venv_dir: pathlib.Path) -> pathlib.Path:
     return venv_dir / "bin" / "python"
 
 
-def _ensure_comfy_venv(comfy_home: pathlib.Path, *, verbose: bool = False) -> Optional[str]:
+def _ensure_comfy_venv(
+    comfy_home: pathlib.Path,
+    *,
+    verbose: bool = False,
+) -> Optional[str]:
     """Гарантирует наличие venv внутри COMFY_HOME и возвращает путь к python."""
 
     try:
@@ -1204,11 +1208,23 @@ def _ensure_comfy_venv(comfy_home: pathlib.Path, *, verbose: bool = False) -> Op
         return str(python_path)
 
     base_python = _select_python_executable()
-    if verbose:
-        log_info(f"Создаю venv: {venv_dir} (python={base_python})")
+    venv_mode = os.environ.get("COMFY_VENV_MODE", "copies").strip().lower()
+
+    venv_args = [base_python, "-m", "venv"]
+    if venv_mode in {"copies", "copy"}:
+        venv_args.append("--copies")
+        if verbose:
+            log_info(f"Создаю venv (copies): {venv_dir} (python={base_python})")
+    elif venv_mode in {"symlinks", "link", "links"}:
+        venv_args.append("--symlinks")
+        if verbose:
+            log_info(f"Создаю venv (symlinks): {venv_dir} (python={base_python})")
+    else:
+        if verbose:
+            log_info(f"Создаю venv (default): {venv_dir} (python={base_python})")
 
     try:
-        code, out, err = run_command([base_python, "-m", "venv", str(venv_dir)])
+        code, out, err = run_command(venv_args + [str(venv_dir)])
     except Exception as exc:
         log_warn(f"Исключение при создании venv в {venv_dir}: {exc}")
         return None
