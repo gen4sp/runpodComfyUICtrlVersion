@@ -197,14 +197,31 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:  # runpod serverless handl
         os.environ["COMFY_HOME"] = str(comfy_home_path)
         os.environ["MODELS_DIR"] = str(models_dir_effective)
 
+        # В serverless окружении используем системный Python, чтобы избежать проблем с portable venv
+        use_system_python = os.environ.get("COMFY_USE_SYSTEM_PYTHON", "").strip().lower() in {"1", "true", "yes"}
+        
         if "COMFY_PYTHON" not in os.environ:
-            venv_python = comfy_home_path / ".venv" / "bin" / "python"
-            if venv_python.exists() and os.access(venv_python, os.X_OK):
-                os.environ["COMFY_PYTHON"] = str(venv_python)
+            if use_system_python:
+                # Используем системный Python и добавляем site-packages из venv в PYTHONPATH
+                venv_site_packages = comfy_home_path / ".venv" / "lib"
+                if venv_site_packages.exists():
+                    # Находим python3.x директорию в lib
+                    python_dirs = list(venv_site_packages.glob("python3.*"))
+                    if python_dirs:
+                        site_packages = python_dirs[0] / "site-packages"
+                        if site_packages.exists():
+                            current_path = os.environ.get("PYTHONPATH", "")
+                            new_path = f"{site_packages}:{current_path}" if current_path else str(site_packages)
+                            os.environ["PYTHONPATH"] = new_path
+                            log_info(f"[serverless] используется системный Python с PYTHONPATH={site_packages}")
             else:
-                log_warn(
-                    f"[serverless] COMFY_PYTHON не задан и {venv_python} не найден или неисполняем; будет использован системный python"
-                )
+                venv_python = comfy_home_path / ".venv" / "bin" / "python"
+                if venv_python.exists() and os.access(venv_python, os.X_OK):
+                    os.environ["COMFY_PYTHON"] = str(venv_python)
+                else:
+                    log_warn(
+                        f"[serverless] COMFY_PYTHON не задан и {venv_python} не найден или неисполняем; будет использован системный python"
+                    )
 
         log_info(
             f"[serverless] готово prebuilt окружение: COMFY_HOME={comfy_home_path}, MODELS_DIR={models_dir_effective}{cache_info}"

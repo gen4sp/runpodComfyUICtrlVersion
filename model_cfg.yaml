@@ -1,6 +1,6 @@
 # my_external_assets:
 #     # База, от которой считаете подпапки
-#     base_path: /workspace/models
+#     base_path: /runpod-volume/models
 #     # Подпапки относительно base_path (можно указывать абсолютные пути)
 #     checkpoints: checkpoints
 #     loras: loras
@@ -13,7 +13,7 @@
 # Доп. путь для кастом-нод
 
 comfyui:
-    base_path: /workspace/models
+    base_path: /runpod-volume/models
     # You can use is_default to mark that these folders should be listed first, and used as the default dirs for eg downloads
     #is_default: true
     checkpoints: checkpoints/

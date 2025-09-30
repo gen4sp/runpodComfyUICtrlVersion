@@ -49,7 +49,7 @@ curl -X POST https://api.runpod.io/graphql \
 2. Укажите образ: `gen4sp/runpod-pytorch-docker:latest`
 3. **Container Start Command**: оставьте пустым
 4. **Environment Variables**: добавьте `SKIP_DOCKER=true` (чтобы сразу пропустить попытки запуска Docker)
-5. Volume: `/workspace`
+5. Volume: `/runpod-volume`
 6. Ports: `8888` (Jupyter)
 
 **Результат**: Контейнер запустится с Jupyter, но без Docker. Если нужен Docker - используйте Вариант A.
@@ -73,7 +73,7 @@ docker run hello-world
 
 # Пример: запуск ComfyUI в Docker
 docker run -d -p 8188:8188 \
-  -v /workspace:/workspace \
+  -v /runpod-volume:/runpod-volume \
   comfyui/comfyui:latest
 ```
 

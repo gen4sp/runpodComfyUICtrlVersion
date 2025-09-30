@@ -8,11 +8,11 @@ from rp_handler import resolver
 
 
 def test_derive_env_defaults(monkeypatch, tmp_path: Path):
-    # No COMFY_HOME env -> default /workspace/ComfyUI per resolver
+    # No COMFY_HOME env -> default /runpod-volume/ComfyUI per resolver
     monkeypatch.delenv("COMFY_HOME", raising=False)
     env = resolver.derive_env(models_dir=None)
-    assert env["COMFY_HOME"].endswith("/workspace/ComfyUI")
-    assert env["MODELS_DIR"].endswith("/workspace/models")
+    assert env["COMFY_HOME"].endswith("/runpod-volume/ComfyUI")
+    assert env["MODELS_DIR"].endswith("/runpod-volume/models")
 
 
 def test_load_lock_missing_returns_empty(tmp_path: Path):

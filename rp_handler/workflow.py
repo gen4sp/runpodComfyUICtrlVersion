@@ -88,13 +88,22 @@ class ComfyUIWorkflowRunner:
         env = os.environ.copy()
         env["COMFY_HOME"] = str(self.comfy_home)
         env["MODELS_DIR"] = str(self.models_dir)
+        
         python_path = env.get("COMFY_PYTHON")
         if not python_path:
-            venv_path = self.comfy_home / ".venv" / "bin" / "python"
-            if venv_path.exists():
-                python_path = str(venv_path)
+            # Если COMFY_USE_SYSTEM_PYTHON установлен, используем системный Python
+            use_system_python = env.get("COMFY_USE_SYSTEM_PYTHON", "").strip().lower() in {"1", "true", "yes"}
+            if use_system_python:
+                python_path = "python3"
+                # PYTHONPATH уже должен быть установлен в serverless.py
+                if self.verbose:
+                    log_info(f"[workflow] используется системный Python: {python_path}")
             else:
-                python_path = "python"
+                venv_path = self.comfy_home / ".venv" / "bin" / "python"
+                if venv_path.exists():
+                    python_path = str(venv_path)
+                else:
+                    python_path = "python"
 
         cmd = [
             python_path, str(main_script),

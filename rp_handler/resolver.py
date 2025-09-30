@@ -40,12 +40,12 @@ def derive_env(models_dir: Optional[str]) -> Dict[str, str]:
     if comfy_home:
         env["COMFY_HOME"] = str(pathlib.Path(comfy_home).resolve())
     else:
-        env["COMFY_HOME"] = str(pathlib.Path("/workspace/ComfyUI").resolve())
+        env["COMFY_HOME"] = str(pathlib.Path("/runpod-volume/ComfyUI").resolve())
 
     if models_dir:
         env["MODELS_DIR"] = str(pathlib.Path(models_dir).resolve())
     else:
-        env["MODELS_DIR"] = str(pathlib.Path("/workspace/models").resolve())
+        env["MODELS_DIR"] = str(pathlib.Path("/runpod-volume/models").resolve())
 
     return env
 
@@ -222,7 +222,7 @@ def _git_ls_remote(repo: str, ref: Optional[str]) -> Optional[str]:
 
 def _pick_default_comfy_home(version_id: str) -> pathlib.Path:
     env_home_raw = os.environ.get("COMFY_HOME")
-    default_env_home = "/workspace/ComfyUI"
+    default_env_home = "/runpod-volume/ComfyUI"
 
     if env_home_raw:
         env_home = pathlib.Path(env_home_raw)
@@ -270,13 +270,13 @@ def _models_dir_default(comfy_home: pathlib.Path) -> pathlib.Path:
     if runpod_volume.exists() and os.access(str(runpod_volume), os.R_OK):
         return runpod_volume / "models"
     
-    # Pod: /workspace
-    workspace = pathlib.Path("/workspace")
-    if workspace.exists() and os.access(str(workspace), os.R_OK):
-        return workspace / "models"
+    # Pod: /runpod-volume
+    runpod-volume = pathlib.Path("/runpod-volume")
+    if runpod-volume.exists() and os.access(str(runpod-volume), os.R_OK):
+        return runpod-volume / "models"
     
     # Fallback: рядом с comfy_home
-    if comfy_home.parts[:2] == ("/", "workspace"):
+    if comfy_home.parts[:2] == ("/", "runpod-volume"):
         return comfy_home.parent / "models"
     
     return comfy_home / "models"
@@ -1365,7 +1365,7 @@ def _find_existing_model(
     
     # Добавляем стандартные пути volume (если они отличаются от models_dir)
     standard_paths = [
-        pathlib.Path("/workspace/models"),
+        pathlib.Path("/runpod-volume/models"),
         pathlib.Path("/runpod-volume/models"),
     ]
     for std_path in standard_paths:

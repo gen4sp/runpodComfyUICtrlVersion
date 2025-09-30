@@ -88,7 +88,7 @@
 ### RunPod / Serverless (кратко)
 
 -   Детальный гид: см. `docs/runpod.md`.
--   Дефолтные пути внутри образа: `COMFY_HOME=/workspace/ComfyUI`, `MODELS_DIR=/workspace/models` (переопределяйте переменными окружения при использовании volume).
+-   Дефолтные пути внутри образа: `COMFY_HOME=/runpod-volume/ComfyUI`, `MODELS_DIR=/runpod-volume/models` (переопределяйте переменными окружения при использовании volume).
 -   Для Pods рекомендуется переопределять на volume: `/runpod-volume/builds/comfy-<id>`.
     -   Точка входа: `docker/entrypoint.sh` → `python -m rp_handler.main`.
     -   Параметры handler: `--version-id|--spec`, `--workflow`, `--output {base64|gcs}` (по умолчанию `gcs`), `--gcs-bucket`, `--gcs-prefix`, `--models-dir`, `--verbose`.

@@ -27,7 +27,7 @@
     python3 scripts/version.py validate my-version
     ```
 
-3. Разверните окружение (внутри образа по умолчанию `/workspace/ComfyUI`, локально `~/comfy-<id>`):
+3. Разверните окружение (внутри образа по умолчанию `/runpod-volume/ComfyUI`, локально `~/comfy-<id>`):
 
     ```bash
     COMFY_HOME=~/comfy-my-version python3 scripts/version.py realize my-version

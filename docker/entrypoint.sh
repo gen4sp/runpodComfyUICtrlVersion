@@ -8,8 +8,8 @@ log_warn() { printf "%b[WARN]%b %s\n" "$YELLOW" "$NC" "$*"; }
 log_error() { printf "%b[ERROR]%b %s\n" "$RED" "$NC" "$*"; }
 log_ok() { printf "%b[OK]%b %s\n" "$GREEN" "$NC" "$*"; }
 
-: "${COMFY_HOME:=/workspace/ComfyUI}"
-: "${MODELS_DIR:=/workspace/models}"
+: "${COMFY_HOME:=/runpod-volume/ComfyUI}"
+: "${MODELS_DIR:=/runpod-volume/models}"
 
 log_info "COMFY_HOME=$COMFY_HOME"
 log_info "MODELS_DIR=$MODELS_DIR"

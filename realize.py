@@ -56,12 +56,12 @@ def _resolve_path(base: pathlib.Path, value: str) -> pathlib.Path:
 
 
 def _detect_volume_path() -> pathlib.Path:
-    for candidate in (pathlib.Path("/runpod-volume"), pathlib.Path("/workspace")):
+    for candidate in (pathlib.Path("/runpod-volume"), pathlib.Path("/runpod-volume")):
         if candidate.exists():
             resolved = candidate.resolve()
             _print_info(f"Использую volume хоста: {resolved}")
             return resolved
-    raise SystemExit("[ERROR] Не найден volume (/runpod-volume или /workspace)")
+    raise SystemExit("[ERROR] Не найден volume (/runpod-volume или /runpod-volume)")
 
 
 def build_image(args: argparse.Namespace, context_path: pathlib.Path, dockerfile_path: pathlib.Path) -> None:
@@ -94,13 +94,13 @@ def run_realize_container(args: argparse.Namespace, image: str, version: str, ho
         f"{host_volume}:{container_volume}",
     ]
 
-    if host_volume != pathlib.Path("/workspace"):
-        workspace_path = host_volume
+    if host_volume != pathlib.Path("/runpod-volume"):
+        runpod-volume_path = host_volume
     else:
-        workspace_path = host_volume
+        runpod-volume_path = host_volume
 
-    if workspace_path != container_volume:
-        cmd.extend(["-v", f"{host_volume}:/workspace"])
+    if runpod-volume_path != container_volume:
+        cmd.extend(["-v", f"{host_volume}:/runpod-volume"])
 
     if args.env:
         for env_value in args.env:

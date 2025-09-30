@@ -314,7 +314,7 @@ def get_runpod_quota_bytes() -> Optional[int]:
 
     # Default from RunPod API or 200 GiB if running under a known RunPod-like mount and no envs set
     try:
-        root = os.environ.get("RUNPOD_VOLUME_ROOT") or ("/runpod-volume" if os.path.exists("/runpod-volume") else ("/workspace" if os.path.exists("/workspace") else None))
+        root = os.environ.get("RUNPOD_VOLUME_ROOT") or ("/runpod-volume" if os.path.exists("/runpod-volume") else ("/runpod-volume" if os.path.exists("/runpod-volume") else None))
         if root:
             default_gb = _parse_int_env([
                 "RUNPOD_VOLUME_DEFAULT_QUOTA_GB",
@@ -336,8 +336,8 @@ def get_runpod_mount_root() -> str:
         return env_root
     if os.path.exists("/runpod-volume"):
         return "/runpod-volume"
-    if os.path.exists("/workspace"):
-        return "/workspace"
+    if os.path.exists("/runpod-volume"):
+        return "/runpod-volume"
     return "/"
 
 

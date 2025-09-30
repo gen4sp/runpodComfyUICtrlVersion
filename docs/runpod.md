@@ -18,7 +18,7 @@ docker build --pull --no-cache -t runpod-comfy:local -f docker/Dockerfile .
 
 Переменные окружения:
 
--   `COMFY_HOME` (по умолчанию `/workspace/ComfyUI` внутри контейнера) — корень окружения версии.
+-   `COMFY_HOME` (по умолчанию `/runpod-volume/ComfyUI` внутри контейнера) — корень окружения версии.
 -   `MODELS_DIR` (по умолчанию `$COMFY_HOME/models`) — каталог моделей; на Pod переопределите на `/runpod-volume/cache/models` или собственный путь внутри volume.
 -   `OUTPUT_MODE` — `gcs` (по умолчанию) или `base64`.
 -   GCS: `GCS_BUCKET` (обязателен для `gcs`), `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`/`GCS_PROJECT`,
@@ -41,7 +41,7 @@ docker build --pull --no-cache -t runpod-comfy:local -f docker/Dockerfile .
     "output_mode": "gcs",
     "gcs_bucket": "<bucket>",
     "gcs_prefix": "comfy/outputs",
-    "models_dir": "/workspace/models",
+    "models_dir": "/runpod-volume/models",
     "verbose": false
 }
 ```
@@ -50,7 +50,7 @@ docker build --pull --no-cache -t runpod-comfy:local -f docker/Dockerfile .
 -   `workflow` — объект JSON или строка JSON. Альтернатива: `workflow_url` (HTTP/HTTPS URL на JSON).
 -   `output_mode` — `gcs` (по умолчанию) или `base64`.
 -   Для `gcs`: укажите `GCS_BUCKET`/`gcs_bucket` и креды (`GOOGLE_APPLICATION_CREDENTIALS` указывает на путь к JSON в контейнере).
--   `models_dir` — необязательно; по умолчанию `/workspace/models`.
+-   `models_dir` — необязательно; по умолчанию `/runpod-volume/models`.
 
 Запуск образа в RunPod Serverless:
 
@@ -99,7 +99,7 @@ docker build --pull --no-cache -t runpod-comfy:local -f docker/Dockerfile .
 ### Совместимость путей и прав
 
 -   Для Pods используйте `/runpod-volume` как базу: окружение размещайте в `/runpod-volume/builds/comfy-<id>`, кеш — в `/runpod-volume/cache/runpod-comfy`, модели — в `/runpod-volume/models` или другом каталоге.
--   Внутри образа дефолты: `/workspace/ComfyUI` и `/workspace/models`. Их следует переопределять переменными окружения, если используется volume.
+-   Внутри образа дефолты: `/runpod-volume/ComfyUI` и `/runpod-volume/models`. Их следует переопределять переменными окружения, если используется volume.
 -   Все скрипты и handler работают в non-interactive режиме; подходят для serverless.
 
 ### Диагностика

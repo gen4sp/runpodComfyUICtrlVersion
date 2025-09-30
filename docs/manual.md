@@ -12,7 +12,7 @@
 ### Основные сущности
 
 -   `versions/<id>.json` — описание версии (ядро, кастом-ноды, модели, опции).
--   `COMFY_HOME` — каталог развёрнутой версии (если переменная не задана, внутри образа используется `/workspace/ComfyUI`, локально — `~/comfy-<id>`, на RunPod volume — `/runpod-volume/builds/comfy-<id>`).
+-   `COMFY_HOME` — каталог развёрнутой версии (если переменная не задана, внутри образа используется `/runpod-volume/ComfyUI`, локально — `~/comfy-<id>`, на RunPod volume — `/runpod-volume/builds/comfy-<id>`).
 -   `MODELS_DIR` — каталог моделей. По умолчанию общий кеш `COMFY_CACHE_ROOT/models`.
 
 ### Шаги

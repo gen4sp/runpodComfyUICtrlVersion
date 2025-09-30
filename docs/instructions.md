@@ -11,15 +11,15 @@
 
 ### Переменные окружения
 
-| Переменная                  | Назначение                                                                                                                                                                            |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `COMFY_HOME`                | Путь развёрнутой версии. Если переменная не задана — внутри образа используется `/workspace/ComfyUI`, локально `~/comfy-<id>`, на RunPod volume — `/runpod-volume/builds/comfy-<id>`. |
-| `MODELS_DIR`                | Путь к моделям. Если не указан — используется общий кеш `COMFY_CACHE_ROOT/models`.                                                                                                    |
-| `COMFY_CACHE_ROOT`          | Базовый каталог кеша (по умолчанию `/runpod-volume/cache/runpod-comfy`, без volume — `~/.cache/runpod-comfy`, в контейнере без volume — `/workspace/cache/runpod-comfy`).             |
-| `COMFY_OFFLINE`             | Если `true`, resolver/realizer не выполняют сетевые операции (коммиты и модели должны быть уже в кеше).                                                                               |
-| `OUTPUT_MODE`               | Режим вывода handler (`base64` или `gcs`, по умолчанию `gcs`).                                                                                                                        |
-| `GCS_*`                     | Настройки для выгрузки результатов в Google Cloud Storage.                                                                                                                            |
-| `HF_TOKEN`, `CIVITAI_TOKEN` | Токены для скачивания моделей.                                                                                                                                                        |
+| Переменная                  | Назначение                                                                                                                                                                                |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `COMFY_HOME`                | Путь развёрнутой версии. Если переменная не задана — внутри образа используется `/runpod-volume/ComfyUI`, локально `~/comfy-<id>`, на RunPod volume — `/runpod-volume/builds/comfy-<id>`. |
+| `MODELS_DIR`                | Путь к моделям. Если не указан — используется общий кеш `COMFY_CACHE_ROOT/models`.                                                                                                        |
+| `COMFY_CACHE_ROOT`          | Базовый каталог кеша (по умолчанию `/runpod-volume/cache/runpod-comfy`, без volume — `~/.cache/runpod-comfy`, в контейнере без volume — `/runpod-volume/cache/runpod-comfy`).             |
+| `COMFY_OFFLINE`             | Если `true`, resolver/realizer не выполняют сетевые операции (коммиты и модели должны быть уже в кеше).                                                                                   |
+| `OUTPUT_MODE`               | Режим вывода handler (`base64` или `gcs`, по умолчанию `gcs`).                                                                                                                            |
+| `GCS_*`                     | Настройки для выгрузки результатов в Google Cloud Storage.                                                                                                                                |
+| `HF_TOKEN`, `CIVITAI_TOKEN` | Токены для скачивания моделей.                                                                                                                                                            |
 
 ### Создание версии
 
@@ -48,7 +48,7 @@ python3 scripts/version.py validate wan-demo
 COMFY_HOME=~/comfy-wan python3 scripts/version.py realize wan-demo
 ```
 
-По умолчанию целевой путь вычисляется автоматически (внутри контейнера — `/workspace/ComfyUI`). Для Pod с volume укажите `COMFY_HOME=/runpod-volume/builds/comfy-wан` или `--target /runpod-volume/builds/comfy-wан`. Для оффлайн-режима добавьте `--offline`. Опция `--wheels-dir` позволяет указывать каталог с wheel-ами для `pip install` без доступа к интернету.
+По умолчанию целевой путь вычисляется автоматически (внутри контейнера — `/runpod-volume/ComfyUI`). Для Pod с volume укажите `COMFY_HOME=/runpod-volume/builds/comfy-wан` или `--target /runpod-volume/builds/comfy-wан`. Для оффлайн-режима добавьте `--offline`. Опция `--wheels-dir` позволяет указывать каталог с wheel-ами для `pip install` без доступа к интернету.
 
 ### Запуск UI
 
