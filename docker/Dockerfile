@@ -3,12 +3,15 @@
 # Используем тот же базовый образ что и в Pod для совместимости окружений
 FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
 
+# COMFY_USE_SYSTEM_PYTHON=1 принудительно использует системный Python из контейнера,
+# т.к. venv созданный в другом окружении (Pod) не portable и будет ломаться в serverless контейнере
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     COMFY_HOME=/runpod-volume/ComfyUI \
-    MODELS_DIR=/runpod-volume/models
+    MODELS_DIR=/runpod-volume/models \
+    COMFY_USE_SYSTEM_PYTHON=1
 
 WORKDIR /app
 

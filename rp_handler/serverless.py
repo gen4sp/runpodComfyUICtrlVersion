@@ -203,6 +203,8 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:  # runpod serverless handl
         if "COMFY_PYTHON" not in os.environ:
             if use_system_python:
                 # Используем системный Python и добавляем site-packages из venv в PYTHONPATH
+                # Это решает проблему non-portable venv между разными контейнерами
+                log_info("[serverless] COMFY_USE_SYSTEM_PYTHON=1 — используется системный Python контейнера")
                 venv_site_packages = comfy_home_path / ".venv" / "lib"
                 if venv_site_packages.exists():
                     # Находим python3.x директорию в lib
@@ -213,11 +215,18 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:  # runpod serverless handl
                             current_path = os.environ.get("PYTHONPATH", "")
                             new_path = f"{site_packages}:{current_path}" if current_path else str(site_packages)
                             os.environ["PYTHONPATH"] = new_path
-                            log_info(f"[serverless] используется системный Python с PYTHONPATH={site_packages}")
+                            log_info(f"[serverless] PYTHONPATH={site_packages}")
+                        else:
+                            log_warn(f"[serverless] site-packages не найден: {site_packages}")
+                    else:
+                        log_warn(f"[serverless] python3.* директория не найдена в {venv_site_packages}")
+                else:
+                    log_warn(f"[serverless] venv не найден: {venv_site_packages}")
             else:
                 venv_python = comfy_home_path / ".venv" / "bin" / "python"
                 if venv_python.exists() and os.access(venv_python, os.X_OK):
                     os.environ["COMFY_PYTHON"] = str(venv_python)
+                    log_info(f"[serverless] используется venv Python: {venv_python}")
                 else:
                     log_warn(
                         f"[serverless] COMFY_PYTHON не задан и {venv_python} не найден или неисполняем; будет использован системный python"
