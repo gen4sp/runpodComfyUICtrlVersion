@@ -1,5 +1,15 @@
 ## ComfyUI Version Control — Manual
 
+```js
+//remove
+rm -rf /runpod-volume/builds/comfy-wan22-fast/
+// create
+...
+
+// realize
+python ./scripts/version.py realize wan22-fast --target /runpod-volume/builds/comfy-wan22-fast/
+```
+
 Минимальный гид по работе со спецификациями `versions/<id>.json` и единым CLI `scripts/version.py`.
 
 ### Предусловия

@@ -11,7 +11,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     COMFY_HOME=/runpod-volume/ComfyUI \
     MODELS_DIR=/runpod-volume/models \
-    COMFY_USE_SYSTEM_PYTHON=1
+    COMFY_USE_SYSTEM_PYTHON=1 \
+    GOOGLE_APPLICATION_CREDENTIALS=/runpod-volume/gc-service-account-key.json \
+    GCS_BUCKET=hyper_tv \
+    OUTPUT_MODE=gcs \
+    GOOGLE_CLOUD_PROJECT=lia-profiler \
+    GCS_PREFIX=comfy/outputs
+
 
 WORKDIR /app
 
