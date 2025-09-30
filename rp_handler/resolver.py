@@ -270,11 +270,6 @@ def _models_dir_default(comfy_home: pathlib.Path) -> pathlib.Path:
     if runpod_volume.exists() and os.access(str(runpod_volume), os.R_OK):
         return runpod_volume / "models"
     
-    # Pod: /runpod-volume
-    runpod-volume = pathlib.Path("/runpod-volume")
-    if runpod-volume.exists() and os.access(str(runpod-volume), os.R_OK):
-        return runpod-volume / "models"
-    
     # Fallback: рядом с comfy_home
     if comfy_home.parts[:2] == ("/", "runpod-volume"):
         return comfy_home.parent / "models"
