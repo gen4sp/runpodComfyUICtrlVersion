@@ -775,10 +775,12 @@ def realize_from_resolved(
         except RuntimeError as exc:
             raise RuntimeError(f"Не удалось подготовить ComfyUI в {repo_dir}: {exc}")
 
-    python_path = _venv_python_from_env()
-    if python_path:
-        ensure_venv = python_path
+    # Проверяем venv в текущем comfy_home (целевая директория развёртки)
+    venv_in_target = _venv_python_path(comfy_home / ".venv")
+    if venv_in_target.exists() and os.access(str(venv_in_target), os.X_OK):
+        python_path = str(venv_in_target)
     else:
+        # Создаём venv в comfy_home
         ensure_venv = _ensure_comfy_venv(comfy_home, verbose=False)
         python_path = ensure_venv or locked_interpreter or _select_python_executable()
 
