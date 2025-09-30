@@ -121,6 +121,10 @@ class ComfyUIWorkflowRunner:
         
         if self.verbose:
             log_info(f"[workflow] старт ComfyUI: {' '.join(cmd)}")
+            log_info(f"[workflow] COMFY_HOME={env.get('COMFY_HOME')}")
+            log_info(f"[workflow] MODELS_DIR={env.get('MODELS_DIR')}")
+            if env.get('PYTHONPATH'):
+                log_info(f"[workflow] PYTHONPATH={env.get('PYTHONPATH')}")
         
         self.process = self._create_process(cmd, env)
         assert self.process.stdout and self.process.stderr
