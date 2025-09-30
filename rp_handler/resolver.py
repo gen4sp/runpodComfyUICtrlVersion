@@ -259,11 +259,26 @@ def _comfy_cache_root() -> pathlib.Path:
 
 
 def _models_dir_default(comfy_home: pathlib.Path) -> pathlib.Path:
+    """Определяет общий MODELS_DIR на volume (одинаковый для всех версий)."""
     env_models = os.environ.get("MODELS_DIR")
     if env_models:
         return pathlib.Path(env_models)
+    
+    # Попытка определить volume root
+    # Serverless: /runpod-volume
+    runpod_volume = pathlib.Path("/runpod-volume")
+    if runpod_volume.exists() and os.access(str(runpod_volume), os.R_OK):
+        return runpod_volume / "models"
+    
+    # Pod: /workspace
+    workspace = pathlib.Path("/workspace")
+    if workspace.exists() and os.access(str(workspace), os.R_OK):
+        return workspace / "models"
+    
+    # Fallback: рядом с comfy_home
     if comfy_home.parts[:2] == ("/", "workspace"):
         return comfy_home.parent / "models"
+    
     return comfy_home / "models"
 
 
@@ -940,17 +955,20 @@ def _prepare_models(
 
                 try:
                     log_info(
-                        f"Модель '{name}' отсутствует по {target_abs}, пробую копировать из {existing_path}"
+                        f"Модель '{name}' найдена в кеше: {existing_path}, создаю симлинк -> {target_abs}"
                     )
-                    verify_models.atomic_copy(str(existing_path), str(target_abs))
-                    log_info(f"Модель '{name}' скопирована из {existing_path}")
+                    target_abs.parent.mkdir(parents=True, exist_ok=True)
+                    if target_abs.is_symlink():
+                        target_abs.unlink()
+                    os.symlink(existing_path, target_abs)
+                    log_info(f"Модель '{name}' подключена симлинком из {existing_path}")
                     continue
                 except OSError as exc:
                     raise RuntimeError(
-                        f"Не удалось скопировать модель '{name}' из {existing_path}: {exc}"
+                        f"Не удалось создать симлинк для модели '{name}' из {existing_path}: {exc}"
                     )
                 except Exception as exc:
-                    log_warn(f"Не удалось скопировать модель '{name}' из {existing_path}: {exc}")
+                    log_warn(f"Не удалось создать симлинк для модели '{name}' из {existing_path}: {exc}")
 
         if target_abs.exists():
             if checksum_hex and checksum_algo:
@@ -1339,19 +1357,34 @@ def _find_existing_model(
     checksum_hex: Optional[str],
     search_depth_limit: int = 1000,
 ) -> Optional[pathlib.Path]:
+    """Ищет модель в models_dir и в стандартных путях volume."""
     name = target_abs.name
-    try:
-        candidates = []
-        for idx, candidate in enumerate(models_dir.rglob(name)):
-            if idx > search_depth_limit:
-                log_warn(
-                    f"Поиск модели '{name}' в MODELS_DIR достиг лимита {search_depth_limit}; остановка"
-                )
-                break
-            candidates.append(candidate)
-    except Exception as exc:
-        log_warn(f"Не удалось обойти MODELS_DIR при поиске модели {name}: {exc}")
-        return None
+    
+    # Список директорий для поиска
+    search_dirs = [models_dir]
+    
+    # Добавляем стандартные пути volume (если они отличаются от models_dir)
+    standard_paths = [
+        pathlib.Path("/workspace/models"),
+        pathlib.Path("/runpod-volume/models"),
+    ]
+    for std_path in standard_paths:
+        if std_path.exists() and std_path.resolve() != models_dir.resolve():
+            search_dirs.append(std_path)
+    
+    candidates = []
+    for search_dir in search_dirs:
+        try:
+            for idx, candidate in enumerate(search_dir.rglob(name)):
+                if idx > search_depth_limit:
+                    log_warn(
+                        f"Поиск модели '{name}' в {search_dir} достиг лимита {search_depth_limit}; остановка"
+                    )
+                    break
+                candidates.append(candidate)
+        except Exception as exc:
+            log_warn(f"Не удалось обойти {search_dir} при поиске модели {name}: {exc}")
+            continue
 
     for candidate in candidates:
         try:

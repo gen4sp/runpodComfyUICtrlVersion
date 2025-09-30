@@ -329,29 +329,36 @@ def parse_hf_source(source: str) -> Tuple[str, str, str]:
     return repo_id, revision, path_in_repo
 
 
-def parse_civitai_source(source: str) -> str:
+def parse_civitai_source(source: str) -> tuple[str, str]:
+    """Парсит civitai:// URL и возвращает (path, query_string)."""
     parsed = urllib.parse.urlparse(source)
     if parsed.scheme not in ("civitai",):
         raise ValueError("not a civitai url")
     path = parsed.path.lstrip("/")
     if not path:
         raise ValueError("Invalid civitai url. Expected civitai://models/<id> or civitai://api/download/models/<id>")
-    return path
+    query = parsed.query or ""
+    return path, query
 
 
-def build_civitai_url(path: str) -> str:
+def build_civitai_url(path: str, query: str = "") -> str:
+    """Собирает полный HTTPS URL для CivitAI."""
     if path.startswith("api/download/models/"):
-        return f"https://civitai.com/{path}"
+        base_url = f"https://civitai.com/{path}"
     elif path.startswith("models/"):
         model_id = path.split("/")[-1]
-        return f"https://civitai.com/api/download/models/{model_id}"
+        base_url = f"https://civitai.com/api/download/models/{model_id}"
     else:
         raise ValueError("Unsupported civitai path format")
+    
+    if query:
+        return f"{base_url}?{query}"
+    return base_url
 
 
 def download_civitai(source: str, dest_path: str, timeout: int = 60) -> None:
-    path = parse_civitai_source(source)
-    download_url = build_civitai_url(path)
+    path, query = parse_civitai_source(source)
+    download_url = build_civitai_url(path, query)
     token = os.environ.get("CIVITAI_TOKEN")
     headers = {"Authorization": f"Bearer {token}"} if token else None
     download_http(download_url, dest_path, timeout=timeout, headers=headers)
