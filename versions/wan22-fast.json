@@ -40,6 +40,13 @@
             "commit": "main",
             "target_dir": "$COMFY_HOME/custom_nodes/RES4LYF",
             "install_requirements": true
+        },
+        {
+            "name": "ComfyUI_essentials",
+            "repo": "https://github.com/cubiq/ComfyUI_essentials",
+            "commit": "main",
+            "target_dir": "$COMFY_HOME/custom_nodes/ComfyUI_essentials",
+            "install_requirements": true
         }
     ],
     "env": {},
