@@ -134,17 +134,34 @@ class ComfyUIWorkflowRunner:
     def _wait_for_comfyui(self, timeout: int = 60) -> None:
         """Дождаться запуска ComfyUI."""
         start_time = time.time()
+        
+        # Проверяем, что процесс не упал
+        if self.process and self.process.poll() is not None:
+            raise RuntimeError(f"ComfyUI процесс завершился преждевременно. Последние строки: {' | '.join(list(self._log_tail))}")
+        
         while time.time() - start_time < timeout:
+            # Проверяем, что процесс всё ещё работает
+            if self.process and self.process.poll() is not None:
+                raise RuntimeError(f"ComfyUI процесс упал во время запуска. Последние строки: {' | '.join(list(self._log_tail))}")
+            
             try:
-                with urllib.request.urlopen(f"{self.api_url}/system_stats", timeout=5) as response:
-                    if response.status == 200:
-                        if self.verbose:
-                            log_info("[workflow] ComfyUI готов к приёму запросов")
-                        return
-            except (urllib.error.URLError, urllib.error.HTTPError, OSError) as exc:
-                if self.verbose:
-                    log_info(f"[workflow] ComfyUI ещё не готов ({exc})")
+                # Пробуем несколько эндпоинтов для проверки готовности
+                for endpoint in ["/", "/queue"]:
+                    try:
+                        with urllib.request.urlopen(f"{self.api_url}{endpoint}", timeout=2) as response:
+                            if response.status == 200:
+                                if self.verbose:
+                                    log_info(f"[workflow] ComfyUI готов к приёму запросов (проверен {endpoint})")
+                                return
+                    except (urllib.error.URLError, urllib.error.HTTPError):
+                        continue
+            except OSError:
                 pass
+            
+            if self.verbose and int(time.time() - start_time) % 5 == 0:  # Логируем каждые 5 секунд
+                elapsed = int(time.time() - start_time)
+                log_info(f"[workflow] ComfyUI ещё не готов (прошло {elapsed}/{timeout} сек)")
+            
             time.sleep(1)
         
         raise RuntimeError(
