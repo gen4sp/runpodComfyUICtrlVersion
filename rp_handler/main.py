@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import os
 import pathlib
-from typing import Optional
+from typing import Optional, Tuple
 
 from .resolver import (
     SpecValidationError,
@@ -41,8 +41,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return p
 
 
-def run_workflow_real(workflow_path: str, comfy_home: str, models_dir: str, verbose: bool) -> bytes:
-    """Выполнить реальный workflow через ComfyUI."""
+def run_workflow_real(workflow_path: str, comfy_home: str, models_dir: str, verbose: bool) -> Tuple[bytes, str]:
+    """Выполнить реальный workflow через ComfyUI.
+    
+    Returns:
+        Tuple[bytes, str]: (данные артефактов, расширение файла)
+    """
     validate_required_path(workflow_path, "Workflow file")
     validate_required_path(comfy_home, "ComfyUI home directory")
     validate_required_path(models_dir, "Models directory")
@@ -93,7 +97,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     # 2) Выполнить воркфлоу через реальный раннер
     try:
-        artifact_bytes = run_workflow_real(args.workflow, str(comfy_home_path), str(models_dir_effective), args.verbose)
+        artifact_bytes, file_extension = run_workflow_real(args.workflow, str(comfy_home_path), str(models_dir_effective), args.verbose)
     except RuntimeError as exc:
         print(f"[ERROR] {exc}")
         return 2
@@ -106,6 +110,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         gcs_bucket=args.gcs_bucket,
         gcs_prefix=args.gcs_prefix,
         verbose=args.verbose,
+        extension=file_extension,
     )
     return 0
 

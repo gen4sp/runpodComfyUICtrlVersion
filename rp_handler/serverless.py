@@ -18,6 +18,42 @@ from .workflow import run_workflow
 from .utils import log_info, log_warn, log_error
 
 
+def _infer_mime_type(extension: str) -> str:
+    """Определить MIME type по расширению файла."""
+    extension = extension.lower().lstrip(".")
+    
+    mime_map = {
+        # Изображения
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "png": "image/png",
+        "gif": "image/gif",
+        "webp": "image/webp",
+        "bmp": "image/bmp",
+        "tiff": "image/tiff",
+        "tif": "image/tiff",
+        # Видео
+        "mp4": "video/mp4",
+        "avi": "video/x-msvideo",
+        "mov": "video/quicktime",
+        "mkv": "video/x-matroska",
+        "webm": "video/webm",
+        "flv": "video/x-flv",
+        # Аудио
+        "mp3": "audio/mpeg",
+        "wav": "audio/wav",
+        "ogg": "audio/ogg",
+        "flac": "audio/flac",
+        # Другое
+        "json": "application/json",
+        "zip": "application/zip",
+        "tar": "application/x-tar",
+        "gz": "application/gzip",
+    }
+    
+    return mime_map.get(extension, "application/octet-stream")
+
+
 def _download_to_temp(url: str) -> str:
     fd, tmp_path = tempfile.mkstemp(prefix="workflow_", suffix=".json")
     os.close(fd)
@@ -40,7 +76,7 @@ def _write_json_to_temp(data: Any) -> str:
     return tmp_path
 
 
-def _gcs_upload(data: bytes, bucket: str, prefix: Optional[str]) -> Dict[str, Any]:
+def _gcs_upload(data: bytes, bucket: str, prefix: Optional[str], extension: str = ".bin") -> Dict[str, Any]:
     try:
         storage = __import__("google.cloud.storage", fromlist=["Client"])  # type: ignore
     except Exception as exc:
@@ -55,19 +91,33 @@ def _gcs_upload(data: bytes, bucket: str, prefix: Optional[str]) -> Dict[str, An
     client = storage.Client(project=project)  # uses GOOGLE_APPLICATION_CREDENTIALS
 
     bucket_obj = client.bucket(bucket)
-    # simple path: <prefix>/<timestamp>-<rand>.bin
+    # Генерируем имя файла с правильным расширением
     import datetime as dt
     import uuid
 
     ts = dt.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     unique = uuid.uuid4().hex[:8]
-    object_name = f"{prefix or 'comfy/outputs'}/{ts}-{unique}.bin"
+    
+    # Убедимся что extension начинается с точки
+    if extension and not extension.startswith("."):
+        extension = f".{extension}"
+    
+    object_name = f"{prefix or 'comfy/outputs'}/{ts}-{unique}{extension}"
     blob = bucket_obj.blob(object_name)
-    blob.upload_from_string(data)
+    
+    # Определяем content_type
+    content_type = _infer_mime_type(extension)
+    
+    # Загружаем с правильным content_type
+    blob.upload_from_string(data, content_type=content_type)
 
-    url = f"gs://{bucket}/{object_name}"
+    # Формируем публичный HTTPS URL
+    https_url = f"https://storage.googleapis.com/{bucket}/{object_name}"
 
-    result: Dict[str, Any] = {"gcs_url": url}
+    result: Dict[str, Any] = {
+        "url": https_url,
+        "gcs_path": f"gs://{bucket}/{object_name}",
+    }
 
     # Optional public-read
     if str(os.environ.get("GCS_PUBLIC", "")).strip().lower() in {"1", "true", "yes", "on"}:
@@ -243,12 +293,12 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:  # runpod serverless handl
         # 2) Run workflow
         try:
             log_info("[serverless] запуск workflow через ComfyUI")
-            artifact_bytes = run_workflow(workflow_file, str(comfy_home_path), str(models_dir_effective), verbose)
+            artifact_bytes, file_extension = run_workflow(workflow_file, str(comfy_home_path), str(models_dir_effective), verbose)
         except RuntimeError as exc:
             log_error(f"[serverless] выполнение workflow завершилось с ошибкой: {exc}")
             return {"error": str(exc)}
 
-        log_info(f"[serverless] workflow завершён, размер артефактов={len(artifact_bytes)} байт")
+        log_info(f"[serverless] workflow завершён, размер артефактов={len(artifact_bytes)} байт, расширение={file_extension}")
 
         # 3) Build output
         if output_mode == "base64":
@@ -258,16 +308,23 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:  # runpod serverless handl
                 "output_mode": "base64",
                 "base64": encoded,
                 "size": len(artifact_bytes),
+                "extension": file_extension,
             }
         elif output_mode == "gcs":
             if not gcs_bucket:
                 return {"error": "GCS bucket is required for gcs output"}
             try:
-                res = _gcs_upload(artifact_bytes, str(gcs_bucket), str(gcs_prefix) if gcs_prefix else None)
+                res = _gcs_upload(
+                    artifact_bytes, 
+                    str(gcs_bucket), 
+                    str(gcs_prefix) if gcs_prefix else None,
+                    extension=file_extension
+                )
                 res.update({
                     "version_id": version_id,
                     "output_mode": "gcs",
                     "size": len(artifact_bytes),
+                    "extension": file_extension,
                 })
                 return res
             except Exception as exc:

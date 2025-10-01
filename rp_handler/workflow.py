@@ -215,9 +215,14 @@ class ComfyUIWorkflowRunner:
         
         raise RuntimeError(f"Workflow did not complete within {timeout} seconds")
     
-    def _collect_artifacts(self, outputs: List[Dict]) -> bytes:
-        """Собрать артефакты из результатов workflow."""
+    def _collect_artifacts(self, outputs: List[Dict]) -> Tuple[bytes, str]:
+        """Собрать артефакты из результатов workflow.
+        
+        Returns:
+            Tuple[bytes, str]: (данные артефактов, расширение файла)
+        """
         artifacts = []
+        first_extension = ""
         
         for output in outputs:
             for node_id, node_output in output.items():
@@ -228,18 +233,39 @@ class ComfyUIWorkflowRunner:
                             image_path = self.comfy_home / "output" / filename
                             if image_path.exists():
                                 artifacts.append(image_path.read_bytes())
+                                # Сохраняем расширение первого файла
+                                if not first_extension:
+                                    first_extension = pathlib.Path(filename).suffix or ".bin"
                                 if self.verbose:
                                     log_info(f"[workflow] найден артефакт: {filename}")
+                
+                # Поддержка видео файлов (если есть ключ 'videos', 'gifs' и т.д.)
+                for media_type in ['videos', 'gifs']:
+                    if media_type in node_output:
+                        for media_info in node_output[media_type]:
+                            filename = media_info.get('filename')
+                            if filename:
+                                media_path = self.comfy_home / "output" / filename
+                                if media_path.exists():
+                                    artifacts.append(media_path.read_bytes())
+                                    if not first_extension:
+                                        first_extension = pathlib.Path(filename).suffix or ".bin"
+                                    if self.verbose:
+                                        log_info(f"[workflow] найден артефакт ({media_type}): {filename}")
         
         if not artifacts:
             log_warn("No artifacts found in workflow output")
-            return b""
+            return b"", ".bin"
         
         # Объединяем все артефакты в один байтовый поток
-        return b"".join(artifacts)
+        return b"".join(artifacts), first_extension
     
-    def run_workflow(self, workflow_path: str) -> bytes:
-        """Выполнить workflow и вернуть артефакты."""
+    def run_workflow(self, workflow_path: str) -> Tuple[bytes, str]:
+        """Выполнить workflow и вернуть артефакты.
+        
+        Returns:
+            Tuple[bytes, str]: (данные артефактов, расширение файла)
+        """
         try:
             # 1. Подготовить директории
             self._prepare_directories()
@@ -261,12 +287,12 @@ class ComfyUIWorkflowRunner:
             outputs = self._wait_for_completion(prompt_id)
             
             # 5. Собрать артефакты
-            artifacts = self._collect_artifacts(outputs)
+            artifacts_data, extension = self._collect_artifacts(outputs)
             
             if self.verbose:
-                log_info(f"[workflow] артефакты собраны: {len(artifacts)} байт")
+                log_info(f"[workflow] артефакты собраны: {len(artifacts_data)} байт, расширение: {extension}")
 
-            return artifacts
+            return artifacts_data, extension
             
         finally:
             self._stop_readers()
@@ -282,7 +308,11 @@ class ComfyUIWorkflowRunner:
                     log_info("[workflow] процесс ComfyUI остановлен")
 
 
-def run_workflow(workflow_path: str, comfy_home: str, models_dir: str, verbose: bool = False) -> bytes:
-    """Удобная функция для запуска workflow."""
+def run_workflow(workflow_path: str, comfy_home: str, models_dir: str, verbose: bool = False) -> Tuple[bytes, str]:
+    """Удобная функция для запуска workflow.
+    
+    Returns:
+        Tuple[bytes, str]: (данные артефактов, расширение файла)
+    """
     runner = ComfyUIWorkflowRunner(comfy_home, models_dir, verbose)
     return runner.run_workflow(workflow_path)

@@ -29,26 +29,43 @@ def _validate_gcs_permissions(client, bucket_name: str, verbose: bool) -> None:
             log_warn(f"Could not verify IAM permissions explicitly: {exc}")
 
 
-def _gcs_upload_with_retries(blob, data: bytes, max_attempts: int = 3, base_sleep: float = 0.5, verbose: bool = False) -> None:
-    last_exc: Optional[Exception] = None
-    for attempt in range(1, max_attempts + 1):
-        try:
-            blob.upload_from_string(data)
-            return
-        except Exception as exc:
-            last_exc = exc
-            if attempt < max_attempts:
-                sleep_s = base_sleep * (2 ** (attempt - 1))
-                if verbose:
-                    log_warn(f"upload attempt {attempt} failed: {exc}; retrying in {sleep_s:.1f}s")
-                time.sleep(sleep_s)
-            else:
-                break
-    assert last_exc is not None
-    raise RuntimeError(f"GCS upload failed after {max_attempts} attempts: {last_exc}") from last_exc
+def _infer_mime_type(extension: str) -> str:
+    """Определить MIME type по расширению файла."""
+    extension = extension.lower().lstrip(".")
+    
+    mime_map = {
+        # Изображения
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "png": "image/png",
+        "gif": "image/gif",
+        "webp": "image/webp",
+        "bmp": "image/bmp",
+        "tiff": "image/tiff",
+        "tif": "image/tiff",
+        # Видео
+        "mp4": "video/mp4",
+        "avi": "video/x-msvideo",
+        "mov": "video/quicktime",
+        "mkv": "video/x-matroska",
+        "webm": "video/webm",
+        "flv": "video/x-flv",
+        # Аудио
+        "mp3": "audio/mpeg",
+        "wav": "audio/wav",
+        "ogg": "audio/ogg",
+        "flac": "audio/flac",
+        # Другое
+        "json": "application/json",
+        "zip": "application/zip",
+        "tar": "application/x-tar",
+        "gz": "application/gzip",
+    }
+    
+    return mime_map.get(extension, "application/octet-stream")
 
 
-def emit_output(data: bytes, mode: str, out_file: Optional[str], gcs_bucket: Optional[str], gcs_prefix: Optional[str], verbose: bool) -> None:
+def emit_output(data: bytes, mode: str, out_file: Optional[str], gcs_bucket: Optional[str], gcs_prefix: Optional[str], verbose: bool, extension: str = ".bin") -> None:
     if mode == "base64":
         payload = base64.b64encode(data).decode("utf-8")
         if out_file:
@@ -83,19 +100,44 @@ def emit_output(data: bytes, mode: str, out_file: Optional[str], gcs_bucket: Opt
         prefix = gcs_prefix or os.environ.get("GCS_PREFIX", "comfy/outputs")
         timestamp = dt.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         unique = uuid.uuid4().hex[:8]
-        object_name = f"{prefix}/{timestamp}-{unique}.bin"
+        
+        # Убедимся что extension начинается с точки
+        if extension and not extension.startswith("."):
+            extension = f".{extension}"
+        
+        object_name = f"{prefix}/{timestamp}-{unique}{extension}"
         blob = bucket.blob(object_name)
+        
+        # Определяем content_type
+        content_type = _infer_mime_type(extension)
 
         # Retry upload with simple exponential backoff
         max_attempts = int(os.environ.get("GCS_RETRIES", "3"))
         base_sleep = float(os.environ.get("GCS_RETRY_BASE_SLEEP", "0.5"))
-        _gcs_upload_with_retries(blob, data=data, max_attempts=max_attempts, base_sleep=base_sleep, verbose=verbose)
+        
+        # Загружаем с правильным content_type
+        last_exc: Optional[Exception] = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                blob.upload_from_string(data, content_type=content_type)
+                break
+            except Exception as exc:
+                last_exc = exc
+                if attempt < max_attempts:
+                    sleep_s = base_sleep * (2 ** (attempt - 1))
+                    if verbose:
+                        log_warn(f"upload attempt {attempt} failed: {exc}; retrying in {sleep_s:.1f}s")
+                    time.sleep(sleep_s)
+                else:
+                    raise RuntimeError(f"GCS upload failed after {max_attempts} attempts: {last_exc}") from last_exc
 
-        url = f"gs://{gcs_bucket}/{object_name}"
-        # Сначала печатаем URL, чтобы первая строка stdout начиналась с gs://
-        print(url)
+        # Формируем публичный HTTPS URL
+        https_url = f"https://storage.googleapis.com/{gcs_bucket}/{object_name}"
+        
+        # Печатаем HTTPS URL вместо gs://
+        print(https_url)
         if verbose:
-            log_info(f"uploaded to {url}")
+            log_info(f"uploaded to {https_url} (gs://{gcs_bucket}/{object_name})")
         
         # Optionally make object public
         if get_env_bool("GCS_PUBLIC", False):

@@ -14,6 +14,31 @@ log_ok() { printf "%b[OK]%b %s\n" "$GREEN" "$NC" "$*"; }
 log_info "COMFY_HOME=$COMFY_HOME"
 log_info "MODELS_DIR=$MODELS_DIR"
 
+# Настройка путей к монтированным директориям
+MOUNT_BASE="/runpod-volume/runpodComfyUICtrlVersion"
+
+# Создаём симлинки на монтированные директории
+if [ -d "$MOUNT_BASE/scripts" ]; then
+    ln -sf "$MOUNT_BASE/scripts" /app/scripts
+    log_info "Смонтирована директория scripts: $MOUNT_BASE/scripts -> /app/scripts"
+else
+    log_warn "Директория scripts не найдена в $MOUNT_BASE/scripts"
+fi
+
+if [ -d "$MOUNT_BASE/rp_handler" ]; then
+    ln -sf "$MOUNT_BASE/rp_handler" /app/rp_handler
+    log_info "Смонтирована директория rp_handler: $MOUNT_BASE/rp_handler -> /app/rp_handler"
+else
+    log_warn "Директория rp_handler не найдена в $MOUNT_BASE/rp_handler"
+fi
+
+if [ -d "$MOUNT_BASE/versions" ]; then
+    ln -sf "$MOUNT_BASE/versions" /app/versions
+    log_info "Смонтирована директория versions: $MOUNT_BASE/versions -> /app/versions"
+else
+    log_warn "Директория versions не найдена в $MOUNT_BASE/versions"
+fi
+
 log_info "ENTRYPOINT_ARGS=$*"
 
 if [ -n "${RUNPOD_TEMPLATE_ID:-}" ]; then

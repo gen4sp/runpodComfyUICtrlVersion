@@ -24,11 +24,7 @@ WORKDIR /app
 # Базовый образ runpod/pytorch уже содержит git, curl, build-essential, libgl1, libglib2.0-0
 # Дополнительных системных пакетов не требуется
 
-# Копируем скрипты и handler внутрь образа
-COPY scripts/ /app/scripts/
-COPY rp_handler/ /app/rp_handler/
-# Версии теперь передаются только через payload (version_id); каталог versions может быть смонтирован при необходимости
-COPY versions/ /app/versions/
+# Скрипты, handler и версии будут монтированы в /runpod-volume/runpodComfyUICtrlVersion/ в момент запуска
 
 # Создаём директории для COMFY_HOME и моделей
 RUN mkdir -p "$COMFY_HOME" "$MODELS_DIR"
