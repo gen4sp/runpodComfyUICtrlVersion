@@ -188,7 +188,7 @@ class ComfyUIWorkflowRunner:
                 raise RuntimeError(f"Failed to submit workflow: {result}")
             return result['prompt_id']
     
-    def _wait_for_completion(self, prompt_id: str, timeout: int = 300) -> List[Dict]:
+    def _wait_for_completion(self, prompt_id: str, timeout: int = 300) -> Dict:
         """Дождаться завершения workflow и получить результаты."""
         start_time = time.time()
         while time.time() - start_time < timeout:
@@ -196,17 +196,25 @@ class ComfyUIWorkflowRunner:
                 with urllib.request.urlopen(f"{self.api_url}/history/{prompt_id}") as response:
                     history = json.loads(response.read().decode('utf-8'))
                     if prompt_id in history:
-                        status = history[prompt_id].get('status', {})
-                        if status.get('status_str') == 'success':
+                        prompt_data = history[prompt_id]
+                        status = prompt_data.get('status', {})
+                        
+                        # Проверяем статус (если есть)
+                        status_str = status.get('status_str') if status else None
+                        
+                        # Если есть outputs, значит выполнение завершено
+                        if 'outputs' in prompt_data:
                             if self.verbose:
-                                log_info("[workflow] статус: success")
-                            return status.get('outputs', [])
-                        elif status.get('status_str') == 'error':
+                                log_info(f"[workflow] статус: завершено успешно, найдено {len(prompt_data['outputs'])} выходных узлов")
+                            return prompt_data['outputs']
+                        
+                        # Проверяем явный статус ошибки
+                        if status_str == 'error':
                             error_msg = status.get('status_message', 'Unknown error')
                             raise RuntimeError(f"Workflow failed: {error_msg}")
-                        else:
-                            if self.verbose:
-                                log_info(f"[workflow] статус: {status.get('status_str')} :: {status.get('status_message')}")
+                        
+                        if self.verbose and status_str:
+                            log_info(f"[workflow] статус: {status_str} :: {status.get('status_message', '')}")
             except (urllib.error.URLError, urllib.error.HTTPError, OSError, json.JSONDecodeError) as exc:
                 if self.verbose:
                     log_info(f"[workflow] ожидание завершения: нет данных ({exc})")
@@ -215,8 +223,11 @@ class ComfyUIWorkflowRunner:
         
         raise RuntimeError(f"Workflow did not complete within {timeout} seconds")
     
-    def _collect_artifacts(self, outputs: List[Dict]) -> Tuple[bytes, str]:
+    def _collect_artifacts(self, outputs: Dict) -> Tuple[bytes, str]:
         """Собрать артефакты из результатов workflow.
+        
+        Args:
+            outputs: Словарь {node_id: node_output} из ComfyUI history API
         
         Returns:
             Tuple[bytes, str]: (данные артефактов, расширение файла)
@@ -224,34 +235,55 @@ class ComfyUIWorkflowRunner:
         artifacts = []
         first_extension = ""
         
-        for output in outputs:
-            for node_id, node_output in output.items():
-                if 'images' in node_output:
-                    for image_info in node_output['images']:
-                        filename = image_info.get('filename')
-                        if filename:
+        if self.verbose:
+            log_info(f"[workflow] обработка outputs: {list(outputs.keys())}")
+        
+        # Итерируемся по всем узлам в outputs
+        for node_id, node_output in outputs.items():
+            if self.verbose:
+                log_info(f"[workflow] узел {node_id}: ключи = {list(node_output.keys())}")
+            
+            # Обработка изображений
+            if 'images' in node_output:
+                for image_info in node_output['images']:
+                    filename = image_info.get('filename')
+                    subfolder = image_info.get('subfolder', '')
+                    if filename:
+                        # Путь может быть в output или output/subfolder
+                        if subfolder:
+                            image_path = self.comfy_home / "output" / subfolder / filename
+                        else:
                             image_path = self.comfy_home / "output" / filename
-                            if image_path.exists():
-                                artifacts.append(image_path.read_bytes())
-                                # Сохраняем расширение первого файла
+                        
+                        if image_path.exists():
+                            artifacts.append(image_path.read_bytes())
+                            if not first_extension:
+                                first_extension = pathlib.Path(filename).suffix or ".bin"
+                            if self.verbose:
+                                log_info(f"[workflow] найден артефакт (image): {filename}")
+                        else:
+                            log_warn(f"[workflow] файл не найден: {image_path}")
+            
+            # Поддержка видео и других медиа файлов
+            for media_type in ['videos', 'gifs', 'video', 'audio']:
+                if media_type in node_output:
+                    for media_info in node_output[media_type]:
+                        filename = media_info.get('filename')
+                        subfolder = media_info.get('subfolder', '')
+                        if filename:
+                            if subfolder:
+                                media_path = self.comfy_home / "output" / subfolder / filename
+                            else:
+                                media_path = self.comfy_home / "output" / filename
+                            
+                            if media_path.exists():
+                                artifacts.append(media_path.read_bytes())
                                 if not first_extension:
                                     first_extension = pathlib.Path(filename).suffix or ".bin"
                                 if self.verbose:
-                                    log_info(f"[workflow] найден артефакт: {filename}")
-                
-                # Поддержка видео файлов (если есть ключ 'videos', 'gifs' и т.д.)
-                for media_type in ['videos', 'gifs']:
-                    if media_type in node_output:
-                        for media_info in node_output[media_type]:
-                            filename = media_info.get('filename')
-                            if filename:
-                                media_path = self.comfy_home / "output" / filename
-                                if media_path.exists():
-                                    artifacts.append(media_path.read_bytes())
-                                    if not first_extension:
-                                        first_extension = pathlib.Path(filename).suffix or ".bin"
-                                    if self.verbose:
-                                        log_info(f"[workflow] найден артефакт ({media_type}): {filename}")
+                                    log_info(f"[workflow] найден артефакт ({media_type}): {filename}")
+                            else:
+                                log_warn(f"[workflow] файл не найден: {media_path}")
         
         if not artifacts:
             log_warn("No artifacts found in workflow output")

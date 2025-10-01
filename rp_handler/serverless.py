@@ -291,14 +291,22 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:  # runpod serverless handl
         )
 
         # 2) Run workflow
+        # Всегда включаем verbose для диагностики
+        verbose_effective = True  # Для диагностики всегда включаем подробные логи
+        
         try:
             log_info("[serverless] запуск workflow через ComfyUI")
-            artifact_bytes, file_extension = run_workflow(workflow_file, str(comfy_home_path), str(models_dir_effective), verbose)
+            artifact_bytes, file_extension = run_workflow(workflow_file, str(comfy_home_path), str(models_dir_effective), verbose_effective)
         except RuntimeError as exc:
             log_error(f"[serverless] выполнение workflow завершилось с ошибкой: {exc}")
             return {"error": str(exc)}
 
         log_info(f"[serverless] workflow завершён, размер артефактов={len(artifact_bytes)} байт, расширение={file_extension}")
+        
+        # Если артефакты пустые - это ошибка
+        if len(artifact_bytes) == 0:
+            log_error("[serverless] workflow выполнен, но не создал никаких артефактов!")
+            return {"error": "Workflow completed but produced no output artifacts"}
 
         # 3) Build output
         if output_mode == "base64":
