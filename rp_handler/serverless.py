@@ -112,6 +112,49 @@ def _download_input_images(input_images: Dict[str, str], comfy_home: pathlib.Pat
             raise RuntimeError(f"Не удалось загрузить изображение '{filename}' из {url}: {exc}") from exc
 
 
+def _process_images_array(images_array: list, comfy_home: pathlib.Path, timeout: int = 60) -> None:
+    """Обработать массив images [{name, image}] где image это HTTPS URL.
+    
+    Args:
+        images_array: Массив [{name: str, image: str}] где image это URL
+        comfy_home: Путь к COMFY_HOME
+        timeout: Таймаут загрузки в секундах
+    """
+    if not images_array:
+        return
+    
+    input_dir = comfy_home / "input"
+    input_dir.mkdir(parents=True, exist_ok=True)
+    
+    for img_obj in images_array:
+        if not isinstance(img_obj, dict):
+            log_warn(f"[serverless] пропущен некорректный элемент массива images: {type(img_obj)}")
+            continue
+        
+        name = img_obj.get("name")
+        image_url = img_obj.get("image")
+        
+        if not isinstance(name, str) or not name.strip():
+            log_warn(f"[serverless] пропущено изображение: некорректное имя")
+            continue
+        
+        if not isinstance(image_url, str) or not image_url.strip():
+            log_warn(f"[serverless] пропущено изображение '{name}': некорректный URL")
+            continue
+        
+        target_path = input_dir / name.strip()
+        
+        try:
+            log_info(f"[serverless] загрузка изображения '{name}' из {image_url}")
+            req = urllib.request.Request(image_url, headers={'User-Agent': 'RunPod-ComfyUI/1.0'})
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                image_data = response.read()
+                target_path.write_bytes(image_data)
+                log_info(f"[serverless] изображение '{name}' сохранено ({len(image_data)} байт)")
+        except Exception as exc:
+            raise RuntimeError(f"Не удалось загрузить изображение '{name}' из {image_url}: {exc}") from exc
+
+
 def _gcs_upload(data: bytes, bucket: str, prefix: Optional[str], extension: str = ".bin") -> Dict[str, Any]:
     try:
         storage = __import__("google.cloud.storage", fromlist=["Client"])  # type: ignore
@@ -327,13 +370,26 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:  # runpod serverless handl
         )
 
         # 1.5) Загрузить входные изображения, если они указаны
+        # Поддерживаем два формата:
+        # 1. input_images: Dict[str, str] - {"filename": "url"}
+        # 2. images: List[Dict] - [{"name": "filename", "image": "url"}]
+        
         input_images = payload.get("input_images")
         if input_images and isinstance(input_images, dict):
-            log_info(f"[serverless] обнаружено {len(input_images)} входных изображений для загрузки")
+            log_info(f"[serverless] обнаружено {len(input_images)} входных изображений (input_images)")
             try:
                 _download_input_images(input_images, comfy_home_path)
             except RuntimeError as exc:
                 log_error(f"[serverless] ошибка загрузки входных изображений: {exc}")
+                return {"error": str(exc)}
+        
+        images_array = payload.get("images")
+        if images_array and isinstance(images_array, list):
+            log_info(f"[serverless] обнаружено {len(images_array)} изображений в массиве (images)")
+            try:
+                _process_images_array(images_array, comfy_home_path)
+            except RuntimeError as exc:
+                log_error(f"[serverless] ошибка обработки images: {exc}")
                 return {"error": str(exc)}
 
         # 2) Run workflow

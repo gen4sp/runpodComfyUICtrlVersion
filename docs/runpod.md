@@ -144,7 +144,9 @@ docker build --pull --no-cache -t runpod-comfy:local -f docker/Dockerfile .
 
 #### Передача изображений через URLs
 
-Изображения передаются через поле `input_images` как словарь `{filename: url}`:
+Поддерживаются два формата передачи изображений:
+
+**Формат 1: `input_images` (словарь)**
 
 ```json
 {
@@ -159,11 +161,33 @@ docker build --pull --no-cache -t runpod-comfy:local -f docker/Dockerfile .
 }
 ```
 
+**Формат 2: `images` (массив)**
+
+```json
+{
+    "input": {
+        "version_id": "wan22-fast",
+        "workflow": {...},
+        "images": [
+            {
+                "name": "img1.png",
+                "image": "https://example.com/image.jpg"
+            },
+            {
+                "name": "style.png",
+                "image": "https://storage.googleapis.com/bucket/style.png"
+            }
+        ]
+    }
+}
+```
+
 **Требования к URL:**
 
 -   Изображения должны быть доступны по HTTP/HTTPS без аутентификации или с bearer token в URL
 -   Поддерживаются форматы: JPG, PNG, WebP, GIF и другие форматы, поддерживаемые PIL
 -   Имена файлов должны совпадать с теми, что используются в workflow узлах `LoadImage`
+-   Оба формата можно использовать одновременно (файлы из обоих источников будут загружены)
 
 **Best practices:**
 
