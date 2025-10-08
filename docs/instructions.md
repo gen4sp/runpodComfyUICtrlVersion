@@ -21,6 +21,36 @@
 | `GCS_*`                     | Настройки для выгрузки результатов в Google Cloud Storage.                                                                                                                                |
 | `HF_TOKEN`, `CIVITAI_TOKEN` | Токены для скачивания моделей.                                                                                                                                                            |
 
+### Структура спецификации версии
+
+Файл `versions/<id>.json` содержит:
+
+-   `schema_version`: версия схемы (2)
+-   `version_id`: идентификатор версии
+-   `comfy`: репозиторий и коммит ядра ComfyUI
+-   `custom_nodes`: список кастом-нод с репозиториями и коммитами
+-   `models`: модели с источниками и путями назначения
+-   `python_packages` (опционально): список дополнительных Python пакетов для установки
+-   `env`: переменные окружения (опционально)
+-   `options`: флаги поведения (`offline`, `skip_models`)
+
+Пример с `python_packages`:
+
+```json
+{
+  "schema_version": 2,
+  "version_id": "my-version",
+  "comfy": { "repo": "https://github.com/comfyanonymous/ComfyUI", "ref": "master" },
+  "custom_nodes": [...],
+  "models": [...],
+  "python_packages": ["sageattention", "onnx>=1.14", "onnxruntime-gpu"],
+  "env": {},
+  "options": {}
+}
+```
+
+Пакеты из `python_packages` устанавливаются после зависимостей кастом-нод, но перед подготовкой моделей. Можно указывать версии в формате pip: `package==1.0.0`, `package>=2.0`, `package`.
+
 ### Создание версии
 
 ```bash
@@ -33,6 +63,7 @@ python3 scripts/version.py create wan-demo \
 -   `--nodes` и `--models` принимают либо JSON-объекты, либо пути к JSON/YAML файлам.
 -   Если `--models-root` указывает на локальный каталог, флаг `--auto-checksum` автоматически проставит `sha256`.
 -   Готовая спецификация сохраняется в `versions/wan-demo.json` (путь можно переопределить `--output`).
+-   Для добавления дополнительных Python пакетов отредактируйте сгенерированный JSON, добавив поле `python_packages`.
 
 ### Проверка спецификации
 

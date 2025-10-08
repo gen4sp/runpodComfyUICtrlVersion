@@ -98,3 +98,81 @@ def test_apply_lock_and_prepare_smoke(monkeypatch):
     assert called["no_cache"] is True
 
 
+def test_validate_version_spec_python_packages(tmp_path: Path):
+    """Проверяет, что validate_version_spec корректно обрабатывает поле python_packages."""
+    spec_file = tmp_path / "test.json"
+    spec_data = {
+        "schema_version": 2,
+        "version_id": "test-version",
+        "comfy": {
+            "repo": "https://github.com/comfyanonymous/ComfyUI",
+            "ref": "master",
+            "commit": "abc123"
+        },
+        "custom_nodes": [],
+        "models": [],
+        "python_packages": ["sageattention", "onnx>=1.14", "onnxruntime-gpu"],
+        "env": {},
+        "options": {}
+    }
+    spec_file.write_text(json.dumps(spec_data), encoding="utf-8")
+    
+    validated = resolver.validate_version_spec(spec_data, spec_file)
+    
+    assert "python_packages" in validated
+    assert isinstance(validated["python_packages"], list)
+    assert len(validated["python_packages"]) == 3
+    assert "sageattention" in validated["python_packages"]
+    assert "onnx>=1.14" in validated["python_packages"]
+    assert "onnxruntime-gpu" in validated["python_packages"]
+
+
+def test_validate_version_spec_python_packages_optional(tmp_path: Path):
+    """Проверяет, что python_packages опционально и можно не указывать."""
+    spec_file = tmp_path / "test.json"
+    spec_data = {
+        "schema_version": 2,
+        "version_id": "test-version",
+        "comfy": {
+            "repo": "https://github.com/comfyanonymous/ComfyUI",
+            "ref": "master",
+            "commit": "abc123"
+        },
+        "custom_nodes": [],
+        "models": [],
+        "env": {},
+        "options": {}
+    }
+    spec_file.write_text(json.dumps(spec_data), encoding="utf-8")
+    
+    validated = resolver.validate_version_spec(spec_data, spec_file)
+    
+    assert "python_packages" in validated
+    assert validated["python_packages"] == []
+
+
+def test_validate_version_spec_python_packages_invalid_type(tmp_path: Path):
+    """Проверяет, что невалидный тип python_packages вызывает ошибку."""
+    spec_file = tmp_path / "test.json"
+    spec_data = {
+        "schema_version": 2,
+        "version_id": "test-version",
+        "comfy": {
+            "repo": "https://github.com/comfyanonymous/ComfyUI",
+            "ref": "master",
+            "commit": "abc123"
+        },
+        "custom_nodes": [],
+        "models": [],
+        "python_packages": "not-a-list",  # должен быть список
+        "env": {},
+        "options": {}
+    }
+    spec_file.write_text(json.dumps(spec_data), encoding="utf-8")
+    
+    with pytest.raises(resolver.SpecValidationError) as exc_info:
+        resolver.validate_version_spec(spec_data, spec_file)
+    
+    assert "python_packages" in str(exc_info.value)
+
+

@@ -594,6 +594,7 @@ def resolve_version_spec(spec_path: pathlib.Path, offline: bool = False) -> Dict
       - comfy: { repo: str, ref?: str, commit?: str }
       - custom_nodes: [ { name?: str, repo: str, ref?: str, commit?: str } ]
       - models: [ { source: str, name?: str, target_subdir?: str } ]
+      - python_packages?: [ str ]
       - env?: dict
       - options?: { offline?: bool, skip_models?: bool }
     """
@@ -607,6 +608,7 @@ def resolve_version_spec(spec_path: pathlib.Path, offline: bool = False) -> Dict
         "custom_nodes": [],
         # модели резолвим позже (для удобства обработки target_subdir)
         "models": [],
+        "python_packages": spec.get("python_packages", []),
         "env": spec.get("env", {}),
         "options": {},
         "source_spec": str(spec_path),
@@ -845,6 +847,23 @@ def realize_from_resolved(
             wheels_dir=wheels_dir,
             offline=offline,
         )
+
+        # Install python packages from spec
+        python_packages = resolved.get("python_packages")
+        if isinstance(python_packages, list) and python_packages:
+            if not offline:
+                log_info(f"[resolver] устанавливаю Python пакеты из спецификации: {', '.join(python_packages)}")
+                cmd = [python_path, "-m", "pip", "install"]
+                if wheels_dir:
+                    cmd.extend(["--no-index", "--find-links", str(wheels_dir)])
+                cmd.extend(python_packages)
+                code, out, err = run_command(cmd)
+                if code != 0:
+                    log_warn(f"pip install python_packages завершился с кодом {code}: {err or out}")
+                else:
+                    log_info("[resolver] Python пакеты из спецификации установлены")
+            else:
+                log_warn(f"Offline режим: пропускаю установку python_packages ({len(python_packages)} пакетов)")
 
         log_info("[resolver] подготовка моделей")
         _prepare_models(
@@ -1167,6 +1186,21 @@ def validate_version_spec(raw_spec: object, source_path: pathlib.Path) -> Dict[s
 
         models.append(model_entry)
 
+    python_packages_raw = raw_spec.get("python_packages", [])
+    if python_packages_raw is None:
+        python_packages_raw = []
+    if not isinstance(python_packages_raw, list):
+        raise SpecValidationError(f"{source_path}: 'python_packages' должен быть списком")
+    python_packages: List[str] = []
+    for idx, entry in enumerate(python_packages_raw):
+        if not isinstance(entry, str):
+            raise SpecValidationError(
+                f"{source_path}: python_packages[{idx}] должен быть строкой (получено {type(entry).__name__})"
+            )
+        pkg = entry.strip()
+        if pkg:
+            python_packages.append(pkg)
+
     env_raw = raw_spec.get("env", {})
     if env_raw is None:
         env_raw = {}
@@ -1209,6 +1243,7 @@ def validate_version_spec(raw_spec: object, source_path: pathlib.Path) -> Dict[s
         },
         "custom_nodes": custom_nodes,
         "models": models,
+        "python_packages": python_packages,
         "env": env,
         "options": options,
     }

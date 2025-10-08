@@ -4,8 +4,8 @@
 
 ```bash
 # Собрать и загрузить с новым тегом
-docker build -t gen4sp/runpod-pytorch-serverless:v13 -f docker/Dockerfile .
-docker push gen4sp/runpod-pytorch-serverless:v13
+docker build -t gen4sp/runpod-pytorch-serverless:v15 -f docker/Dockerfile .
+docker push gen4sp/runpod-pytorch-serverless:v15
 ```
 
 ## Что изменилось
