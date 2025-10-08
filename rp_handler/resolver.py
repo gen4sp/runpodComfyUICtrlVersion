@@ -1011,14 +1011,22 @@ def _prepare_models(
             continue
 
         try:
-            with tempfile.TemporaryDirectory(prefix="model_fetch_", dir=str(models_dir)) as tmp_dir:
+            # Создаем временную директорию в той же папке, где будет файл
+            target_dir = target_abs.parent
+            target_dir.mkdir(parents=True, exist_ok=True)
+            
+            with tempfile.TemporaryDirectory(prefix=".model_fetch_", dir=str(target_dir)) as tmp_dir:
                 log_info(f"Загрузка модели '{name}' из source: {source}")
+                # Скачиваем во временную директорию в той же файловой системе
                 tmp_path = verify_models.fetch_to_temp(source, tmp_dir=tmp_dir, timeout=_MODEL_FETCH_TIMEOUT)
+                
                 if checksum_hex and checksum_algo:
                     actual = verify_models.compute_checksum(tmp_path, algo=checksum_algo).split(":", 1)[1]
                     if actual != checksum_hex:
                         raise RuntimeError("downloaded checksum mismatch")
-                verify_models.atomic_copy(tmp_path, str(target_abs))
+                
+                # Атомарное переименование без копирования (обе папки на одной ФС)
+                os.replace(tmp_path, str(target_abs))
                 log_info(f"Модель '{name}' сохранена: {target_abs}")
         except Exception as exc:
             raise RuntimeError(
