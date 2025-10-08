@@ -17,6 +17,33 @@ log_info "MODELS_DIR=$MODELS_DIR"
 # Настройка путей к монтированным директориям
 MOUNT_BASE="/runpod-volume/runpodComfyUICtrlVersion"
 
+# Ожидание монтирования volume с таймаутом
+VOLUME_WAIT_TIMEOUT=60
+VOLUME_WAIT_COUNT=0
+log_info "Проверка доступности volume..."
+
+while [ ! -d "/runpod-volume" ] && [ $VOLUME_WAIT_COUNT -lt $VOLUME_WAIT_TIMEOUT ]; do
+    if [ $((VOLUME_WAIT_COUNT % 10)) -eq 0 ]; then
+        log_warn "Ожидание монтирования /runpod-volume... (${VOLUME_WAIT_COUNT}s/${VOLUME_WAIT_TIMEOUT}s)"
+    fi
+    sleep 1
+    VOLUME_WAIT_COUNT=$((VOLUME_WAIT_COUNT + 1))
+done
+
+if [ -d "/runpod-volume" ]; then
+    log_ok "Volume /runpod-volume успешно примонтирован"
+else
+    log_error "КРИТИЧНО: /runpod-volume не примонтирован после ${VOLUME_WAIT_TIMEOUT}s!"
+    log_error "Контейнер не может работать без volume. Проверьте настройки Network Volume в RunPod."
+    exit 1
+fi
+
+# Дополнительно: ждём доступности директории с кодом
+if [ ! -d "$MOUNT_BASE" ]; then
+    log_warn "Директория $MOUNT_BASE не найдена на volume"
+    log_warn "Убедитесь, что код размещён в правильной директории на volume"
+fi
+
 # Создаём симлинки на монтированные директории
 if [ -d "$MOUNT_BASE/scripts" ]; then
     ln -sf "$MOUNT_BASE/scripts" /app/scripts

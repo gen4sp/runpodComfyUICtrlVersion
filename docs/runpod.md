@@ -11,6 +11,7 @@
 
 ```bash
 ./scripts/build_docker.sh --tag runpod-comfy:local
+./scripts/build_docker.sh --tag gen4sp/runpod-pytorch-serverless:v13
 # или вручную, чтобы гарантированно подтянуть свежие файлы entrypoint:
 docker build --pull --no-cache -t runpod-comfy:local -f docker/Dockerfile .
 # Загрузите образ в свой реестр (GHCR/AR/ECR/Docker Hub), если требуется.
@@ -38,6 +39,10 @@ docker build --pull --no-cache -t runpod-comfy:local -f docker/Dockerfile .
     "version_id": "wan22-fast",
     "workflow": { "nodes": {} },
     "workflow_url": "https://.../workflow.json",
+    "input_images": {
+        "img1.png": "https://example.com/image1.jpg",
+        "img2.png": "https://storage.googleapis.com/bucket/image2.png"
+    },
     "output_mode": "gcs",
     "gcs_bucket": "<bucket>",
     "gcs_prefix": "comfy/outputs",
@@ -48,6 +53,7 @@ docker build --pull --no-cache -t runpod-comfy:local -f docker/Dockerfile .
 
 -   `version_id` — обязательно; должен соответствовать файлу `versions/<id>.json` (файл должен быть смонтирован или включён в образ произвольно; образ общий, не привязан к версии).
 -   `workflow` — объект JSON или строка JSON. Альтернатива: `workflow_url` (HTTP/HTTPS URL на JSON).
+-   `input_images` — необязательно; словарь `{filename: url}` для загрузки входных изображений. Изображения будут скачаны в `{COMFY_HOME}/input/` перед запуском workflow. В workflow используйте узел `LoadImage` с указанными именами файлов.
 -   `output_mode` — `gcs` (по умолчанию) или `base64`.
 -   Для `gcs`: укажите `GCS_BUCKET`/`gcs_bucket` и креды (`GOOGLE_APPLICATION_CREDENTIALS` указывает на путь к JSON в контейнере).
 -   `models_dir` — необязательно; по умолчанию `/runpod-volume/models`.
@@ -57,7 +63,7 @@ docker build --pull --no-cache -t runpod-comfy:local -f docker/Dockerfile .
 1. Соберите и (при необходимости) загрузите образ в реестр (используйте уникальный тег, чтобы RunPod не кешировал старый entrypoint):
 
 ```bash
-./scripts/build_docker.sh --tag <registry>/<image>:<tag>
+./scripts/build_docker.sh --tag gen4sp/runpod-pytorch-serverless:v13
 # docker push <registry>/<image>:<tag>
 ```
 
@@ -73,13 +79,51 @@ docker build --pull --no-cache -t runpod-comfy:local -f docker/Dockerfile .
 
     Примечание: если нужно запустить CLI-handler, передайте `cli` в Args.
 
-3. Отправка задания (пример тела запроса):
+3. Отправка задания (примеры тел запроса):
+
+**Text-to-Image (без входных изображений):**
 
 ```json
 {
     "input": {
         "version_id": "wan22-fast",
         "workflow_url": "https://example.com/workflows/wan22-fast.json",
+        "output_mode": "gcs",
+        "gcs_bucket": "<bucket>"
+    }
+}
+```
+
+**Image-to-Image (с входными изображениями):**
+
+```json
+{
+    "input": {
+        "version_id": "wan22-fast",
+        "workflow_url": "https://example.com/workflows/wan22-i2i.json",
+        "input_images": {
+            "img1.png": "https://storage.googleapis.com/my-bucket/source-image.jpg",
+            "img2.png": "https://example.com/style-reference.png"
+        },
+        "output_mode": "gcs",
+        "gcs_bucket": "<bucket>"
+    }
+}
+```
+
+**С inline workflow и изображениями:**
+
+```json
+{
+    "input": {
+        "version_id": "wan22-fast",
+        "workflow": {
+            "1": {"inputs": {"image": "input.jpg"}, "class_type": "LoadImage"},
+            "2": {...}
+        },
+        "input_images": {
+            "input.jpg": "https://example.com/my-image.jpg"
+        },
         "output_mode": "gcs",
         "gcs_bucket": "<bucket>"
     }
@@ -96,6 +140,58 @@ docker build --pull --no-cache -t runpod-comfy:local -f docker/Dockerfile .
 -   Чтобы избежать переустановки Python-пакетов на каждом инстансе, запекайте зависимости напрямую (создайте `requirements.txt` и `pip install` на build-стадии).
 -   Модели держите на volume/в GCS. `verify_models.py` докачает недостающее в единый кэш `COMFY_CACHE_ROOT/models`.
 
+### Работа с входными изображениями
+
+#### Передача изображений через URLs
+
+Изображения передаются через поле `input_images` как словарь `{filename: url}`:
+
+```json
+{
+    "input": {
+        "version_id": "wan22-fast",
+        "workflow": {...},
+        "input_images": {
+            "img1.png": "https://example.com/image.jpg",
+            "style.png": "https://storage.googleapis.com/bucket/style.png"
+        }
+    }
+}
+```
+
+**Требования к URL:**
+
+-   Изображения должны быть доступны по HTTP/HTTPS без аутентификации или с bearer token в URL
+-   Поддерживаются форматы: JPG, PNG, WebP, GIF и другие форматы, поддерживаемые PIL
+-   Имена файлов должны совпадать с теми, что используются в workflow узлах `LoadImage`
+
+**Best practices:**
+
+1. Используйте публичные URL или signed URLs для облачных хранилищ (GCS, S3)
+2. Для GCS используйте signed URLs с ограниченным временем жизни
+3. Оптимизируйте размер изображений перед загрузкой (resize/compress), чтобы ускорить передачу
+4. Имена файлов должны быть уникальными в рамках одного запроса
+
+**Пример с GCS signed URL:**
+
+```bash
+# Создание signed URL (действителен 1 час)
+gsutil signurl -d 1h /path/to/service-account.json gs://bucket/image.jpg
+```
+
+**В workflow:**
+
+```json
+{
+    "1": {
+        "inputs": {
+            "image": "img1.png"
+        },
+        "class_type": "LoadImage"
+    }
+}
+```
+
 ### Совместимость путей и прав
 
 -   Для Pods используйте `/runpod-volume` как базу: окружение размещайте в `/runpod-volume/builds/comfy-<id>`, кеш — в `/runpod-volume/cache/runpod-comfy`, модели — в `/runpod-volume/models` или другом каталоге.
@@ -106,3 +202,30 @@ docker build --pull --no-cache -t runpod-comfy:local -f docker/Dockerfile .
 
 -   Запускайте с `--verbose`, проверяйте валидность `GOOGLE_APPLICATION_CREDENTIALS` и прав на `GCS_BUCKET`.
 -   При ошибках загрузки в GCS можно временно переключиться на `--output base64` для локальной проверки.
+
+#### Ошибка "context deadline exceeded" при создании контейнера
+
+**Симптом:**
+
+```
+worker is ready
+create container gen4sp/runpod-pytorch-serverless:v12
+error creating container: context deadline exceeded
+```
+
+**Причина:** Контейнер пытается стартовать, но volume не успевает примонтироваться, что вызывает timeout.
+
+**Решение:**
+
+1. Entrypoint теперь ждёт до 60 секунд монтирования volume перед запуском
+2. Пересоберите образ с **новым тегом**:
+    ```bash
+    docker build -t gen4sp/runpod-pytorch-serverless:v13 -f docker/Dockerfile .
+    docker push gen4sp/runpod-pytorch-serverless:v13
+    ```
+3. Обновите Serverless Template с новым тегом образа
+4. Убедитесь что Network Volume правильно подключён к endpoint:
+    - Storage → Network Volumes → выберите volume
+    - Serverless Template → Advanced → Network Volume → выберите volume
+    - Mount Path должен быть `/runpod-volume`
+5. Убедитесь что код размещён на volume: `/runpod-volume/runpodComfyUICtrlVersion/{scripts,rp_handler,versions,models,nodes}`

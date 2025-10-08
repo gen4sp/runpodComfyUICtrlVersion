@@ -76,6 +76,42 @@ def _write_json_to_temp(data: Any) -> str:
     return tmp_path
 
 
+def _download_input_images(input_images: Dict[str, str], comfy_home: pathlib.Path, timeout: int = 60) -> None:
+    """Скачать входные изображения по URL в директорию input ComfyUI.
+    
+    Args:
+        input_images: Словарь {filename: url}
+        comfy_home: Путь к COMFY_HOME
+        timeout: Таймаут загрузки в секундах
+    """
+    if not input_images:
+        return
+    
+    input_dir = comfy_home / "input"
+    input_dir.mkdir(parents=True, exist_ok=True)
+    
+    for filename, url in input_images.items():
+        if not isinstance(filename, str) or not filename.strip():
+            log_warn(f"[serverless] пропущено изображение с некорректным именем: {filename}")
+            continue
+        
+        if not isinstance(url, str) or not url.strip():
+            log_warn(f"[serverless] пропущено изображение '{filename}': некорректный URL")
+            continue
+        
+        target_path = input_dir / filename.strip()
+        
+        try:
+            log_info(f"[serverless] загрузка изображения '{filename}' из {url}")
+            req = urllib.request.Request(url, headers={'User-Agent': 'RunPod-ComfyUI/1.0'})
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                image_data = response.read()
+                target_path.write_bytes(image_data)
+                log_info(f"[serverless] изображение '{filename}' сохранено ({len(image_data)} байт)")
+        except Exception as exc:
+            raise RuntimeError(f"Не удалось загрузить изображение '{filename}' из {url}: {exc}") from exc
+
+
 def _gcs_upload(data: bytes, bucket: str, prefix: Optional[str], extension: str = ".bin") -> Dict[str, Any]:
     try:
         storage = __import__("google.cloud.storage", fromlist=["Client"])  # type: ignore
@@ -289,6 +325,16 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:  # runpod serverless handl
         log_info(
             f"[serverless] готово prebuilt окружение: COMFY_HOME={comfy_home_path}, MODELS_DIR={models_dir_effective}{cache_info}"
         )
+
+        # 1.5) Загрузить входные изображения, если они указаны
+        input_images = payload.get("input_images")
+        if input_images and isinstance(input_images, dict):
+            log_info(f"[serverless] обнаружено {len(input_images)} входных изображений для загрузки")
+            try:
+                _download_input_images(input_images, comfy_home_path)
+            except RuntimeError as exc:
+                log_error(f"[serverless] ошибка загрузки входных изображений: {exc}")
+                return {"error": str(exc)}
 
         # 2) Run workflow
         # Всегда включаем verbose для диагностики
