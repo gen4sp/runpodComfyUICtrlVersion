@@ -267,8 +267,49 @@ def download_http(url: str, dest_path: str, timeout: int = 60, headers: Optional
     req = urllib.request.Request(url, headers=req_headers)
     with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec - user-controlled URLs expected
         safe_makedirs(str(pathlib.Path(dest_path).parent))
+        
+        # Получаем размер файла для индикатора прогресса
+        total_size = resp.headers.get("Content-Length")
+        total_mb = None
+        if total_size:
+            try:
+                total_mb = int(total_size) / (1024 * 1024)
+            except (ValueError, TypeError):
+                pass
+        
         with open(dest_path, "wb") as f:
-            shutil.copyfileobj(resp, f, length=1024 * 1024)
+            downloaded = 0
+            chunk_size = 1024 * 1024  # 1 MB
+            last_percent = -1
+            last_logged_mb = 0
+            
+            while True:
+                chunk = resp.read(chunk_size)
+                if not chunk:
+                    break
+                f.write(chunk)
+                downloaded += len(chunk)
+                
+                # Показываем прогресс
+                if total_mb:
+                    downloaded_mb = downloaded / (1024 * 1024)
+                    percent = int((downloaded / int(total_size)) * 100)
+                    if percent != last_percent and percent % 5 == 0:  # Показываем каждые 5%
+                        print(f"  └─ Загружено: {downloaded_mb:.1f}/{total_mb:.1f} MB ({percent}%)", flush=True)
+                        last_percent = percent
+                else:
+                    # Если размер неизвестен, показываем каждые 10 MB
+                    downloaded_mb = downloaded / (1024 * 1024)
+                    if int(downloaded_mb / 10) > last_logged_mb:
+                        print(f"  └─ Загружено: {downloaded_mb:.1f} MB", flush=True)
+                        last_logged_mb = int(downloaded_mb / 10)
+            
+            # Финальное сообщение
+            if total_mb:
+                print(f"  └─ Загружено: {total_mb:.1f}/{total_mb:.1f} MB (100%)", flush=True)
+            else:
+                downloaded_mb = downloaded / (1024 * 1024)
+                print(f"  └─ Загружено: {downloaded_mb:.1f} MB (завершено)", flush=True)
 
 
 def download_file(src_path: str, dest_path: str) -> None:
