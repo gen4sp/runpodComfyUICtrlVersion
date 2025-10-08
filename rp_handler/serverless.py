@@ -264,7 +264,7 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:  # runpod serverless handl
     version_id = version_id.strip()
 
     request_id = event.get("requestId") if isinstance(event, dict) else None
-    log_info(f"[serverless] handler start (request_id={request_id}, version_id={version_id})")
+    log_info(f"[serverless] handler start++ (request_id={request_id}, version_id={version_id})")
 
     workflow_file: Optional[str] = None
     try:
