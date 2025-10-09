@@ -31,9 +31,10 @@ _COMFY_CACHE_ENV = (
 
 def _default_cache_root() -> pathlib.Path:
     base_name = "runpod-comfy"
-    runpod_volume = pathlib.Path("/runpod-volume")
-    if runpod_volume.exists() and os.access(str(runpod_volume), os.W_OK | os.X_OK):
-        return (runpod_volume / "cache" / base_name).resolve()
+    # Проверяем оба варианта RunPod volume: /workspace (pod) и /runpod-volume (serverless)
+    for volume_path in [pathlib.Path("/workspace"), pathlib.Path("/runpod-volume")]:
+        if volume_path.exists() and os.access(str(volume_path), os.W_OK | os.X_OK):
+            return (volume_path / "cache" / base_name).resolve()
 
     xdg = os.environ.get("XDG_CACHE_HOME")
     if xdg:
