@@ -22,6 +22,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # Базовый образ runpod/pytorch уже содержит git, curl, build-essential, libgl1, libglib2.0-0
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libjpeg-dev \
+    libpng-dev \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
 # Дополнительных системных пакетов не требуется
 
 # Скрипты, handler и версии будут монтированы в /runpod-volume/runpodComfyUICtrlVersion/ в момент запуска

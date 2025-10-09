@@ -50,7 +50,9 @@
             "install_requirements": true
         }
     ],
-    "env": {},
+    "env": {
+        "COMFY_PYTHON": "python3.11"
+    },
     "models": [
         {
             "name": "wan21-t2v-14b-lightx2v-cfg-step-distill-lora-rank32",
@@ -133,7 +135,13 @@
             "target_path": "$MODELS_DIR/loras/wan14b_SmartphoneSnapshotPhotoReality_v1_by-AI_Characters.safetensors"
         }
     ],
-    "python_packages": ["Pillow", "sageattention", "onnx", "onnxruntime-gpu"],
+    "python_packages": [
+        "--force-reinstall",
+        "Pillow",
+        "sageattention",
+        "onnx",
+        "onnxruntime-gpu"
+    ],
     "options": {},
     "schema_version": 2,
     "version_id": "wan22-fast"
