@@ -40,8 +40,8 @@ def derive_env(models_dir: Optional[str]) -> Dict[str, str]:
     if comfy_home:
         env["COMFY_HOME"] = str(pathlib.Path(comfy_home).resolve())
     else:
-        # Проверяем оба варианта RunPod volume: /workspace (pod) и /runpod-volume (serverless)
-        for volume_path in [pathlib.Path("/workspace"), pathlib.Path("/runpod-volume")]:
+        # Проверяем RunPod volume (приоритет /runpod-volume, затем /workspace)
+        for volume_path in [pathlib.Path("/runpod-volume"), pathlib.Path("/workspace")]:
             if volume_path.exists():
                 env["COMFY_HOME"] = str((volume_path / "ComfyUI").resolve())
                 break
@@ -51,8 +51,8 @@ def derive_env(models_dir: Optional[str]) -> Dict[str, str]:
     if models_dir:
         env["MODELS_DIR"] = str(pathlib.Path(models_dir).resolve())
     else:
-        # Проверяем оба варианта RunPod volume: /workspace (pod) и /runpod-volume (serverless)
-        for volume_path in [pathlib.Path("/workspace"), pathlib.Path("/runpod-volume")]:
+        # Проверяем RunPod volume (приоритет /runpod-volume, затем /workspace)
+        for volume_path in [pathlib.Path("/runpod-volume"), pathlib.Path("/workspace")]:
             if volume_path.exists():
                 env["MODELS_DIR"] = str((volume_path / "models").resolve())
                 break
@@ -242,8 +242,8 @@ def _pick_default_comfy_home(version_id: str) -> pathlib.Path:
         if env_home_raw.strip() and env_home_raw.strip() != default_env_home:
             return env_home
 
-    # Проверяем оба варианта RunPod volume: /workspace (pod) и /runpod-volume (serverless)
-    for volume_path in [pathlib.Path("/workspace"), pathlib.Path("/runpod-volume")]:
+    # Проверяем RunPod volume (приоритет /runpod-volume, затем /workspace)
+    for volume_path in [pathlib.Path("/runpod-volume"), pathlib.Path("/workspace")]:
         if volume_path.exists() and os.access(str(volume_path), os.W_OK | os.X_OK):
             builds_root = volume_path / "builds"
             return (builds_root / f"comfy-{version_id}").resolve()
@@ -277,13 +277,13 @@ def _models_dir_default(comfy_home: pathlib.Path) -> pathlib.Path:
     if env_models:
         return pathlib.Path(env_models)
     
-    # Попытка определить volume root: /workspace (pod) или /runpod-volume (serverless)
-    for volume_path in [pathlib.Path("/workspace"), pathlib.Path("/runpod-volume")]:
+    # Попытка определить volume root (приоритет /runpod-volume, затем /workspace)
+    for volume_path in [pathlib.Path("/runpod-volume"), pathlib.Path("/workspace")]:
         if volume_path.exists() and os.access(str(volume_path), os.R_OK):
             return volume_path / "models"
     
     # Fallback: рядом с comfy_home, если comfy_home на volume
-    if comfy_home.parts[:2] in [("/", "workspace"), ("/", "runpod-volume")]:
+    if comfy_home.parts[:2] in [("/", "runpod-volume"), ("/", "workspace")]:
         return comfy_home.parent / "models"
     
     return comfy_home / "models"

@@ -587,14 +587,30 @@ def cmd_run_handler(args: argparse.Namespace) -> int:
 
 
 def cmd_delete(args: argparse.Namespace) -> int:
-    target_path = pathlib.Path(args.target).resolve() if args.target else _pick_default_comfy_home(args.version_id)
     removed_any = False
-    if target_path.exists():
-        print(f"[INFO] Удаляем окружение: {target_path}")
-        shutil.rmtree(target_path)
-        removed_any = True
+    
+    # Ищем build директорию во всех возможных местах
+    if args.target:
+        candidates = [pathlib.Path(args.target).resolve()]
     else:
-        print(f"[WARN] Окружение не найдено: {target_path}")
+        candidates = []
+        # Проверяем RunPod volume (приоритет /runpod-volume, затем /workspace)
+        for volume_path in [pathlib.Path("/runpod-volume"), pathlib.Path("/workspace")]:
+            if volume_path.exists():
+                candidates.append(volume_path / "builds" / f"comfy-{args.version_id}")
+        # Добавляем локальный вариант
+        candidates.append(pathlib.Path.home() / f"comfy-{args.version_id}")
+    
+    # Удаляем все найденные build директории
+    for target_path in candidates:
+        if target_path.exists():
+            print(f"[INFO] Удаляем окружение: {target_path}")
+            shutil.rmtree(target_path)
+            removed_any = True
+    
+    if not removed_any:
+        checked_paths = "\n  ".join(str(p) for p in candidates)
+        print(f"[WARN] Окружение не найдено в:\n  {checked_paths}")
 
     lock_path = _lock_path_for_version(args.version_id)
     if lock_path.exists():
