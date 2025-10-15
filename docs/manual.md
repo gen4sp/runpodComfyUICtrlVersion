@@ -1,5 +1,10 @@
 ## ComfyUI Version Control — Manual
 
+```shell
+ docker build -t gen4sp/runpod-pytorch-serverless:v18 -f docker/Dockerfile .
+ docker push gen4sp/runpod-pytorch-serverless:v18
+```
+
 ```js
 //remove
 rm -rf /runpod-volume/builds/comfy-wan22-fast/

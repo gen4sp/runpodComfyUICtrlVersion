@@ -13,6 +13,9 @@ from collections import deque
 
 from .utils import log_info, log_warn, log_error, run_command, validate_required_path
 
+# Таймаут ожидания ответа от ComfyUI workflow в секундах
+_COMFY_RESPOND_TIMEOUT = int(os.environ.get("COMFY_RESPOND_TIMEOUT", "300"))
+
 
 class ComfyUIWorkflowRunner:
     """Раннер для выполнения ComfyUI workflow в headless режиме."""
@@ -188,7 +191,7 @@ class ComfyUIWorkflowRunner:
                 raise RuntimeError(f"Failed to submit workflow: {result}")
             return result['prompt_id']
     
-    def _wait_for_completion(self, prompt_id: str, timeout: int = 300) -> Dict:
+    def _wait_for_completion(self, prompt_id: str, timeout: int = _COMFY_RESPOND_TIMEOUT) -> Dict:
         """Дождаться завершения workflow и получить результаты."""
         start_time = time.time()
         while time.time() - start_time < timeout:
