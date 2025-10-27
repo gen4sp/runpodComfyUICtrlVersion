@@ -13,6 +13,9 @@ from collections import deque
 
 from .utils import log_info, log_warn, log_error, run_command, validate_required_path
 
+# Таймаут ожидания запуска ComfyUI в секундах
+_COMFY_STARTUP_TIMEOUT = int(os.environ.get("COMFY_STARTUP_TIMEOUT", "180"))
+
 # Таймаут ожидания ответа от ComfyUI workflow в секундах
 _COMFY_RESPOND_TIMEOUT = int(os.environ.get("COMFY_RESPOND_TIMEOUT", "300"))
 
@@ -134,7 +137,7 @@ class ComfyUIWorkflowRunner:
         self._spawn_reader(self.process.stdout, "stdout")
         self._spawn_reader(self.process.stderr, "stderr")
     
-    def _wait_for_comfyui(self, timeout: int = 60) -> None:
+    def _wait_for_comfyui(self, timeout: int = _COMFY_STARTUP_TIMEOUT) -> None:
         """Дождаться запуска ComfyUI."""
         start_time = time.time()
         
